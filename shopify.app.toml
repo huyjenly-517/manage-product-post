@@ -1,0 +1,32 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "84ea256426b476e9df7b2e91db506da8"
+name = "manage-product-post"
+handle = "manage-product-post"
+application_url = "https://proposition-acquisition-unauthorized-fabrics.trycloudflare.com"
+embedded = true
+
+[build]
+include_config_on_deploy = true
+automatically_update_urls_on_dev = true
+
+[webhooks]
+api_version = "2025-07"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "/webhooks/app/uninstalled"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/scopes_update" ]
+  uri = "/webhooks/app/scopes_update"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "write_products"
+
+[auth]
+redirect_urls = ["https://proposition-acquisition-unauthorized-fabrics.trycloudflare.com/auth/callback", "https://proposition-acquisition-unauthorized-fabrics.trycloudflare.com/auth/shopify/callback", "https://proposition-acquisition-unauthorized-fabrics.trycloudflare.com/api/auth/callback"]
+
+[pos]
+embedded = false
