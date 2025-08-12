@@ -15,7 +15,6 @@ import {
   Banner
 } from '@shopify/polaris';
 import BlogBuilder from '../components/BlogBuilder';
-import SimpleTextTest from '../components/SimpleTextTest';
 
 // Loader function để lấy dữ liệu từ Shopify API
 export async function loader({ request }) {
@@ -23,74 +22,142 @@ export async function loader({ request }) {
     const { admin } = await authenticate.admin(request);
 
     if (!admin) {
-      console.error('Không thể xác thực admin');
-      return json({
-        articles: [],
-        success: false,
-        error: 'Không thể xác thực quyền admin'
-      });
+      return json({ articles: [], success: false, error: 'Không thể xác thực quyền admin' });
     }
 
-    console.log('Đang lấy dữ liệu bài viết từ Shopify GraphQL API...');
-
-    const response = await admin.graphql(`
-      query getBlogPosts {
-        articles(first: 250) {
-          edges {
-            node {
-              id
-              title
-              author {
-                name
-              }
-              publishedAt
-              handle
-              tags
-              blog {
+    // Sử dụng Shopify GraphQL API để lấy danh sách blog posts
+    try {
+      const response = await admin.graphql(`
+        query getBlogPosts($first: Int!) {
+          blogs(first: $first) {
+            edges {
+              node {
+                id
                 title
+                handle
+                articles(first: 100) {
+                  edges {
+                    node {
+                      id
+                      title
+                      handle
+                      authorV2 {
+                        name
+                      }
+                      publishedAt
+                      tags
+                      seo {
+                        title
+                        description
+                      }
+                    }
+                  }
+                }
               }
             }
           }
         }
+      `, {
+        variables: {
+          first: 10
+        }
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('GraphQL API response failed:', response.status, errorText);
+        throw new Error(`GraphQL API failed: ${response.status}`);
       }
-    `);
 
-    console.log('Response từ Shopify GraphQL API:', response);
+      const result = await response.json();
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('GraphQL API response không thành công:', response.status, errorText);
-      return json({
-        articles: [],
-        success: false,
-        error: `GraphQL API Error: ${response.status} - ${errorText}`
-      });
+      if (result.data?.blogs?.edges) {
+        const articles = [];
+        
+        result.data.blogs.edges.forEach(blogEdge => {
+          const blog = blogEdge.node;
+          if (blog.articles && blog.articles.edges) {
+            blog.articles.edges.forEach(articleEdge => {
+              const article = articleEdge.node;
+              articles.push({
+                id: article.id.toString(),
+                title: article.title,
+                author: article.authorV2?.name || 'Admin',
+                date: article.publishedAt ? new Date(article.publishedAt).toISOString().slice(0, 10) : 'Chưa xuất bản',
+                handle: article.handle || article.title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+                tags: Array.isArray(article.tags) ? article.tags : (article.tags ? [article.tags] : []),
+                blogTitle: blog.title || 'Blog chính'
+              });
+            });
+          }
+        });
+
+        // Sắp xếp theo ngày (mới nhất trước)
+        articles.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        return json({ articles, success: true });
+      }
+
+      return json({ articles: [], success: true });
+
+    } catch (graphqlError) {
+      console.log('GraphQL API failed, trying REST API approach:', graphqlError.message);
+      
+      // Fallback: Sử dụng Shopify Admin REST API
+      try {
+        const response = await admin.rest.get({
+          path: 'blogs.json'
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('REST API response failed:', response.status, errorText);
+          throw new Error(`REST API failed: ${response.status}`);
+        }
+
+        const result = await response.json();
+
+        if (result.blogs && Array.isArray(result.blogs)) {
+          const articles = [];
+          
+          // Lấy tất cả bài viết từ tất cả blogs
+          for (const blog of result.blogs) {
+            try {
+              const articlesResponse = await admin.rest.get({
+                path: `blogs/${blog.id}/articles.json`
+              });
+              
+              if (articlesResponse.ok) {
+                const articlesData = await articlesResponse.json();
+                if (articlesData.articles && Array.isArray(articlesData.articles)) {
+                  articlesData.articles.forEach(article => {
+                    articles.push({
+                      id: article.id.toString(),
+                      title: article.title,
+                      author: article.author || 'Admin',
+                      date: article.published_at ? new Date(article.published_at).toISOString().slice(0, 10) : 'Chưa xuất bản',
+                      handle: article.handle || article.title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+                      tags: Array.isArray(article.tags) ? article.tags : (article.tags ? [article.tags] : []),
+                      blogTitle: blog.title || 'Blog chính'
+                    });
+                  });
+                }
+              }
+            } catch (articleError) {
+              console.error(`Error fetching articles for blog ${blog.id}:`, articleError);
+            }
+          }
+
+          return json({ articles, success: true });
+        }
+
+        return json({ articles: [], success: true });
+
+      } catch (restError) {
+        console.log('REST API also failed:', restError.message);
+        return json({ articles: [], success: true });
+      }
     }
-
-    const responseJson = await response.json();
-    console.log('Dữ liệu JSON từ GraphQL API:', responseJson);
-
-    if (responseJson.errors) {
-      console.error('GraphQL errors:', responseJson.errors);
-      return json({
-        articles: [],
-        success: false,
-        error: `GraphQL Error: ${responseJson.errors[0]?.message || 'Unknown error'}`
-      });
-    }
-
-    const articles = responseJson.data.articles.edges.map(edge => ({
-      id: edge.node.id.split('/').pop(),
-      title: edge.node.title,
-      author: edge.node.author?.name || 'Không xác định',
-      date: edge.node.publishedAt ? new Date(edge.node.publishedAt).toISOString().slice(0, 10) : 'Chưa xuất bản',
-      handle: edge.node.handle,
-      tags: edge.node.tags,
-      blogTitle: edge.node.blog?.title || 'Blog chính'
-    }));
-
-    console.log('Đã xử lý', articles.length, 'bài viết từ GraphQL API');
-    return json({ articles, success: true });
 
   } catch (error) {
     console.error('Lỗi chi tiết khi lấy dữ liệu bài viết:', error);
@@ -121,11 +188,20 @@ export default function BlogListPage() {
   const [showBuilder, setShowBuilder] = useState(false);
   const [editingPost, setEditingPost] = useState(null);
   const [builderMode, setBuilderMode] = useState('create'); // 'create' hoặc 'edit'
-  const [showTextTest, setShowTextTest] = useState(false);
+
+  const handleRefresh = () => {
+    window.location.reload();
+  };
 
   useEffect(() => {
     if (success) {
-      setPosts(articles);
+      // Ensure all posts have properly formatted tags
+      const safePosts = articles.map(post => ({
+        ...post,
+        tags: Array.isArray(post.tags) ? post.tags : (post.tags ? [post.tags] : [])
+      }));
+      
+      setPosts(safePosts);
     }
     setLoading(false);
   }, [articles, success]);
@@ -133,8 +209,6 @@ export default function BlogListPage() {
   const handleDelete = async (id) => {
     if (confirm('Bạn có chắc chắn muốn xoá bài viết này?')) {
       try {
-        console.log('Attempting to delete post with ID:', id);
-
         // Xóa bài viết khỏi Shopify store
         const response = await fetch(`/api/blog/delete`, {
           method: 'POST',
@@ -144,19 +218,14 @@ export default function BlogListPage() {
           body: JSON.stringify({ id }),
         });
 
-        console.log('Delete response status:', response.status);
-        console.log('Delete response ok:', response.ok);
-
         if (response.ok) {
           const result = await response.json();
-          console.log('Delete success result:', result);
 
           // Xóa thành công, cập nhật state
           setPosts((prev) => prev.filter((post) => post.id !== id));
           alert('Đã xóa bài viết thành công!');
         } else {
           const errorData = await response.json();
-          console.error('Delete error response:', errorData);
 
           let errorMessage = 'Lỗi khi xóa bài viết';
           if (errorData.error) {
@@ -169,7 +238,6 @@ export default function BlogListPage() {
           alert(errorMessage);
         }
       } catch (error) {
-        console.error('Network or parsing error when deleting:', error);
         alert(`Có lỗi xảy ra khi xóa bài viết: ${error.message}`);
       }
     }
@@ -284,13 +352,6 @@ export default function BlogListPage() {
           <Layout.Section>
             <Banner status="critical" title="Không thể tải dữ liệu">
               <p>{error}</p>
-
-              {debug && (
-                <div style={{ marginTop: '1rem', padding: '1rem', backgroundColor: '#f6f6f7', borderRadius: '4px' }}>
-                  <Text variant="bodySm" as="strong">Debug info:</Text> {debug}
-                </div>
-              )}
-
               <div style={{ marginTop: '1rem' }}>
                 <Text variant="bodyMd" as="h3">🔧 Cách khắc phục:</Text>
                 <ul>
@@ -316,7 +377,7 @@ export default function BlogListPage() {
   if (showBuilder) {
     return (
       <Page
-        title={builderMode === 'create' ? 'Tạo bài viết mới' : 'Chỉnh sửa bài viết'}
+        title={builderMode === 'create' ? 'Add New' : 'Edit Builder'}
         backAction={{
           content: 'Quay lại Blog List',
           onAction: handleBuilderCancel,
@@ -335,79 +396,32 @@ export default function BlogListPage() {
     );
   }
 
-  if (showTextTest) {
-    return (
-      <Page
-        title="Test Text Editor"
-        backAction={{
-          content: 'Quay lại Blog List',
-          onAction: () => setShowTextTest(false),
-        }}
-      >
-        <Layout>
-          <Layout.Section>
-            <Card>
-              <SimpleTextTest />
-            </Card>
-          </Layout.Section>
-        </Layout>
-      </Page>
-    );
-  }
-
   return (
     <Page
       title="Blog Posts"
       primaryAction={{
-        content: 'Thêm bài viết',
+        content: 'Create',
         icon: 'Plus',
         onAction: handleAdd,
       }}
-      secondaryActions={[
-        {
-          content: 'Test Text Editor',
-          onAction: () => setShowTextTest(!showTextTest),
-        },
-        {
-          content: 'Test Blog API',
-          onAction: async () => {
-            try {
-              const response = await fetch('/api/blog/test', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({}),
-              });
-              
-              if (response.ok) {
-                const result = await response.json();
-                console.log('Test API result:', result);
-                alert('Test API thành công! Kiểm tra console để xem kết quả.');
-              } else {
-                const error = await response.json();
-                console.error('Test API error:', error);
-                alert(`Test API thất bại: ${error.error}`);
-              }
-            } catch (error) {
-              console.error('Test API error:', error);
-              alert(`Có lỗi khi test API: ${error.message}`);
-            }
-          },
-        },
-      ]}
     >
       <Layout>
         <Layout.Section>
           <Card>
             <div className="flex justify-between items-center">
               <Text variant="headingMd" as="h2">
-                Danh sách bài viết ({posts.length})
+                Total ({posts.length})
               </Text>
               <div className="flex gap-2">
                 <Button icon="Search" variant="tertiary" />
                 <Button icon="Filter" variant="tertiary" />
                 <Button icon="Sort" variant="tertiary" />
+                <Button icon="Refresh" variant="tertiary" onClick={handleRefresh} title="Làm mới dữ liệu">
+                  Refresh
+                </Button>
               </div>
             </div>
+
 
             {posts.length === 0 ? (
               <EmptyState
@@ -424,80 +438,146 @@ export default function BlogListPage() {
                 <table className="w-full border-collapse border border-gray-200">
                   <thead>
                     <tr className="bg-gray-50">
-                      <th className="border border-gray-200 px-4 py-2 text-left font-medium">Tiêu đề</th>
-                      <th className="border border-gray-200 px-4 py-2 text-left font-medium">Tác giả</th>
-                      <th className="border border-gray-200 px-4 py-2 text-left font-medium">Ngày</th>
-                      <th className="border border-gray-200 px-4 py-2 text-left font-medium">Tags</th>
-                      <th className="border border-gray-200 px-4 py-2 text-left font-medium">Hành động</th>
+                      <th className="border border-gray-200 px-4 py-3 text-left font-medium" style={{ width: '35%' }}>Title & Handle</th>
+                      <th className="border border-gray-200 px-4 py-3 text-left font-medium" style={{ width: '10%' }}>Author</th>
+                      <th className="border border-gray-200 px-4 py-3 text-left font-medium" style={{ width: '10%' }}>Date</th>
+                      <th className="border border-gray-200 px-4 py-3 text-left font-medium" style={{ width: '15%' }}>Tags</th>
+                      <th className="border border-gray-200 px-4 py-3 text-left font-medium" style={{ width: '20%' }}>Action</th>
                     </tr>
                   </thead>
                   <tbody>
                     {posts.map((post) => (
                       <tr key={post.id} className="hover:bg-gray-50">
-                        <td className="border border-gray-200 px-4 py-2">
-                          <div className="flex items-center gap-2">
-                            <img
-                              src="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
-                              alt="Blog post"
-                              width="20"
-                              height="20"
-                            />
-                            <div className="flex flex-col">
-                              <Text variant="bodyMd" as="span" fontWeight="semibold">
-                                {post.title}
-                              </Text>
-                              <Text variant="bodySm" as="span" tone="subdued">
-                                /{post.handle}
-                              </Text>
-                            </div>
+                        <td className="border border-gray-200 px-4 py-3">
+                          <div className="flex flex-col">
+                            <Text variant="bodyMd" as="div" fontWeight="semibold" style={{ 
+                              color: '#1f2937',
+                              fontSize: '16px',
+                              lineHeight: '1.4',
+                              marginBottom: '4px'
+                            }}>
+                              {post.title}
+                            </Text>
+                            <Text variant="bodySm" as="div" tone="subdued" style={{
+                              fontSize: '13px',
+                              color: '#6b7280',
+                              fontFamily: 'monospace'
+                            }}>
+                              /{post.handle}
+                            </Text>
                           </div>
                         </td>
-                        <td className="border border-gray-200 px-4 py-2">
-                          <div className="flex items-center gap-2">
-                            <img src="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png" alt="User" width="20" height="20" />
-                            <Text variant="bodyMd" as="span">{post.author}</Text>
-                          </div>
+                        <td className="border border-gray-200 px-4 py-3">
+                          <Text variant="bodyMd" as="span" style={{ fontSize: '14px', color: '#374151' }}>
+                            {post.author}
+                          </Text>
                         </td>
-                        <td className="border border-gray-200 px-4 py-2">
-                          <div className="flex items-center gap-2">
-                            <img src="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png" alt="Calendar" width="20" height="20" />
-                            <Text variant="bodyMd" as="span">{post.date}</Text>
-                          </div>
+                        <td className="border border-gray-200 px-4 py-3">
+                          <Text variant="bodyMd" as="span" style={{ fontSize: '14px', color: '#374151' }}>
+                            {post.date}
+                          </Text>
                         </td>
-                        <td className="border border-gray-200 px-4 py-2">
-                          {post.tags && post.tags.length > 0 ? (
+                        <td className="border border-gray-200 px-4 py-3">
+                          {post.tags && Array.isArray(post.tags) && post.tags.length > 0 ? (
                             <div className="flex flex-wrap gap-1">
-                              {post.tags.slice(0, 3).map((tag, index) => (
-                                <Badge key={index} tone="info">{tag}</Badge>
+                              {post.tags.slice(0, 2).map((tag, index) => (
+                                <span key={index} style={{
+                                  background: '#f3f4f6',
+                                  color: '#374151',
+                                  padding: '4px 8px',
+                                  borderRadius: '6px',
+                                  fontSize: '12px',
+                                  fontWeight: '500'
+                                }}>
+                                  {tag}
+                                </span>
                               ))}
-                              {post.tags.length > 3 && (
-                                <Badge tone="subdued">+{post.tags.length - 3}</Badge>
+                              {post.tags.length > 2 && (
+                                <span style={{
+                                  background: '#e5e7eb',
+                                  color: '#6b7280',
+                                  padding: '4px 8px',
+                                  borderRadius: '6px',
+                                  fontSize: '12px',
+                                  fontWeight: '500'
+                                }}>
+                                  +{post.tags.length - 2}
+                                </span>
                               )}
                             </div>
                           ) : (
-                            <Text variant="bodySm" as="span" tone="subdued">Không có tags</Text>
+                            <Text variant="bodySm" as="span" tone="subdued" style={{ fontSize: '13px' }}>
+                              Empty tags
+                            </Text>
                           )}
                         </td>
-                        <td className="border border-gray-200 px-4 py-2">
+                        <td className="border border-gray-200 px-4 py-3">
                           <div className="flex gap-2">
+                              <Button
+                                  variant="tertiary"
+                                  onClick={() => handleEdit(post)}
+                                  title="Chỉnh sửa bài viết"
+                                  size="slim"
+                                  style={{
+                                      background: '#3b82f6',
+                                      color: 'white',
+                                      border: 'none',
+                                      padding: '6px 12px',
+                                      borderRadius: '6px',
+                                      fontSize: '12px',
+                                      fontWeight: '500'
+                                  }}
+                              >
+                                  Edit With Builder
+                              </Button>
                             <Button
-                              icon="Edit"
                               variant="tertiary"
-                              onClick={() => handleEdit(post)}
-                              title="Chỉnh sửa bài viết"
+                              onClick={() => {
+                                // Tạo URL frontend cho bài viết
+                                // Format: https://store-domain.myshopify.com/blogs/blog-handle/article-handle
+                                const storeDomain = window.location.hostname.includes('myshopify.com') 
+                                  ? window.location.hostname 
+                                  : 'muamuahe.myshopify.com';
+                                
+                                // Sử dụng blogTitle nếu có, hoặc fallback về 'news'
+                                const blogHandle = post.blogTitle ? 
+                                  post.blogTitle.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') : 
+                                  'news';
+                                
+                                const frontendUrl = `https://${storeDomain}/blogs/${blogHandle}/${post.handle}`;
+                                window.open(frontendUrl, '_blank');
+                              }}
+                              title="Xem bài viết trên frontend của store"
                               size="slim"
+                              style={{
+                                background: '#10b981',
+                                color: 'white',
+                                border: 'none',
+                                padding: '6px 12px',
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                                fontWeight: '500'
+                              }}
                             >
-                              Sửa
+                              View
                             </Button>
                             <Button
-                              icon="Delete"
                               variant="tertiary"
                               tone="critical"
                               onClick={() => handleDelete(post.id)}
                               title="Xóa bài viết"
                               size="slim"
+                              style={{
+                                background: '#ef4444',
+                                color: 'white',
+                                border: 'none',
+                                padding: '6px 12px',
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                                fontWeight: '500'
+                              }}
                             >
-                              Xóa
+                              Delete
                             </Button>
                           </div>
                         </td>
@@ -513,4 +593,5 @@ export default function BlogListPage() {
     </Page>
   );
 }
+
 

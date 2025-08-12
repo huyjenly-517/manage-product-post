@@ -1,0 +1,25 @@
+{% comment %}
+  Quickview Block for Shopify Themes
+  This block automatically enables quickview functionality on the page
+  Usage: {% render 'quickview' %}
+{% endcomment %}
+
+{%- if block.settings.enable_quickview -%}
+  {%- render 'quickview' -%}
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "Quickview",
+  "target": "section",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "enable_quickview",
+      "label": "Enable Quickview",
+      "default": true,
+      "info": "Enable quickview functionality for products on this page"
+    }
+  ]
+}
+{% endschema %} 

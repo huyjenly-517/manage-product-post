@@ -1,0 +1,67 @@
+
+process create app shopify
+1. Tạo app Shopify bằng npx
+- npx @shopify/create-app@latest
+	+ Mở trình duyệt và đăng nhập.
+- chọn kiểu cấu trúc ứng dụng
+	+ Build a Remix app (recommended)
+		* Đây là lựa chọn để tạo một Shopify App đầy đủ, sử dụng Remix framework (do Shopify chính thức hỗ trợ).
+		  App bao gồm:
+		  Giao diện (UI) trong Shopify Admin (embedded app)
+		  Server-side logic (API, xử lý webhook, OAuth…)
+		  Có thể mở rộng bằng các Shopify Extensions (như Product Discount, Checkout UI...)
+		* App cần làm việc với:
+		  Giao diện riêng (admin UI)
+		  Xử lý dữ liệu
+		  Tích hợp API
+		  Gửi/nhận webhook
+		-> Để tạo Shopify App đầy đủ chức năng cho Merchant sử dụng
+	+ Build an extension-only app
+		* Đây là một app chỉ chứa các phần mở rộng (extensions) chứ không có giao diện hay backend riêng.
+		* Ví dụ các extension:
+		  Checkout UI extensions
+		  Product discount functions
+		  Theme app extensions
+		  Cart transformers
+		-> Bạn chỉ cần tạo extension, không cần server hay UI
+- chọn ngôn ngữ để phát triển ứng dụng
+	+ Javascript
+		* Ưu điểm:
+		  Ngắn gọn, đơn giản, dễ tiếp cận
+		  Tốt cho người mới học hoặc project nhỏ
+		* Nhược điểm:
+		  Không có kiểm tra kiểu biến → dễ gặp lỗi runtime
+		  Khó scale với codebase lớn
+		-> Dùng để tạo Project nhỏ, đơn giản
+	+ TypeScript
+		* Ưu điểm:
+		  Phát hiện lỗi sớm (ngay khi lập trình)
+		  Tự động gợi ý (IntelliSense) rất tốt trong VS Code
+		  Dễ bảo trì, dễ làm việc nhóm
+		  Chuẩn hiện đại
+		* Nhược điểm:
+		  Phải học nhiều về typing
+		  Viết code nhiều dòng hơn
+		-> Dùng để tạo Project lớn, dễ bảo trì
+- Create this project as a new app on Shopify?
+	+ Yes, create this app as a new app
+		* Dự án mới hoàn toàn
+		-> CLI làm tự động
+	+ No, connect it to an existing app
+		* Clone lại, làm việc nhóm
+		-> Làm việc nhóm, hoặc deploy lại app cũ
+
+- npm run dev Or shopify app dev
+	+ Have Shopify automatically update your app's URL in order to create a preview experience?
+		* (y) Yes, automatically update (Tự động cập nhật URL)
+		   Đang chạy app trên máy local
+		   Lần đầu hoặc môi trường dev mới
+		-> Có thể preview app ngay lập tức mà không cần tự chỉnh Dashboard 
+			Eg my app: 	
+			Preview URL: https://yourstore.myshopify.com/admin/oauth/redirect_from_cli?client_id=xxxxxxxxx
+			GraphiQL URL: http://localhost:3457/graphiql
+		* (n) No, never (phải tự cập nhật URL trong Partner Dashboard)
+		   Đang dùng domain cố định đã thiết lập thủ công
+		   Đang deploy production hoặc preview đã có sẵn
+		-> Phải tự cập nhật URL trong Partner Dashboard
+- shopify login

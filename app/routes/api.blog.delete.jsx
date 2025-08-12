@@ -25,90 +25,119 @@ export async function action({ request }) {
     }
 
     console.log('Đang xóa bài viết với ID:', id);
-    console.log('Full Shopify ID:', `gid://shopify/Article/${id}`);
 
-    // Xóa bài viết bằng GraphQL mutation
-    const graphqlQuery = `
-      mutation deleteArticle($input: ArticleDeleteInput!) {
-        articleDelete(input: $input) {
-          deletedArticleId
-          userErrors {
-            field
-            message
+    // Sử dụng Shopify GraphQL API để xóa article
+    console.log('Using Shopify GraphQL API for article deletion...');
+    
+    try {
+      // Xóa article sử dụng GraphQL API
+      const deleteArticleResponse = await admin.graphql(`
+        mutation articleDelete($input: ArticleDeleteInput!) {
+          articleDelete(input: $input) {
+            deletedArticleId
+            userErrors {
+              field
+              message
+            }
           }
         }
-      }
-    `;
-    
-    const variables = {
-      input: {
-        id: `gid://shopify/Article/${id}`
-      }
-    };
-    
-    console.log('GraphQL Query:', graphqlQuery);
-    console.log('GraphQL Variables:', variables);
-
-    const response = await admin.graphql(graphqlQuery, { variables });
-
-    console.log('GraphQL Response status:', response.status);
-    console.log('GraphQL Response ok:', response.ok);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('GraphQL response không thành công:', response.status, errorText);
-      
-      // Thử parse error để xem có phải GraphQL error không
-      try {
-        const errorJson = JSON.parse(errorText);
-        if (errorJson.errors) {
-          return json({ 
-            error: 'GraphQL Error', 
-            details: errorJson.errors[0]?.message || errorText,
-            type: 'GraphqlQueryError'
-          }, { status: 500 });
+      `, {
+        variables: {
+          input: {
+            id: id
+          }
         }
-      } catch (e) {
-        // Không thể parse JSON, trả về error text gốc
+      });
+
+      if (!deleteArticleResponse.ok) {
+        throw new Error(`Failed to delete article: ${deleteArticleResponse.status}`);
       }
+
+      const deleteArticleResult = await deleteArticleResponse.json();
+
+      if (deleteArticleResult.data?.articleDelete?.userErrors?.length > 0) {
+        const errorMessage = deleteArticleResult.data.articleDelete.userErrors[0].message;
+        throw new Error(errorMessage);
+      }
+
+      console.log('Article deleted successfully via GraphQL API');
       
       return json({ 
-        error: `API Error: ${response.status}`, 
-        details: errorText 
-      }, { status: 500 });
+        success: true, 
+        deletedId: id,
+        message: 'Article deleted successfully via Shopify GraphQL API!'
+      });
+
+    } catch (graphqlError) {
+      console.log('GraphQL API deletion failed, trying REST API approach:', graphqlError.message);
+      
+      // Fallback: Sử dụng REST API để xóa article
+      try {
+        // Tìm article trong tất cả blogs
+        const blogsResponse = await admin.rest.get({
+          path: 'blogs.json'
+        });
+
+        if (!blogsResponse.ok) {
+          throw new Error(`Failed to get blogs: ${blogsResponse.status}`);
+        }
+
+        const blogsResult = await blogsResponse.json();
+        let articleFound = false;
+
+        // Tìm và xóa article trong tất cả blogs
+        for (const blog of blogsResult.blogs) {
+          try {
+            const articlesResponse = await admin.rest.get({
+              path: `blogs/${blog.id}/articles.json`
+            });
+            
+            if (articlesResponse.ok) {
+              const articlesData = await articlesResponse.json();
+              if (articlesData.articles) {
+                const article = articlesData.articles.find(a => a.id.toString() === id);
+                if (article) {
+                  // Xóa article
+                  const deleteResponse = await admin.rest.delete({
+                    path: `blogs/${blog.id}/articles/${id}.json`
+                  });
+
+                  if (deleteResponse.ok) {
+                    console.log('Article deleted successfully via REST API');
+                    articleFound = true;
+                    break;
+                  } else {
+                    console.log(`Failed to delete article from blog ${blog.id}`);
+                  }
+                }
+              }
+            }
+          } catch (articleError) {
+            console.log(`Error checking blog ${blog.id}:`, articleError.message);
+          }
+        }
+
+        if (articleFound) {
+          return json({ 
+            success: true, 
+            deletedId: id,
+            message: 'Article deleted successfully via Shopify Admin REST API!'
+          });
+        } else {
+          throw new Error('Article not found in any blog');
+        }
+
+      } catch (restError) {
+        console.log('REST API deletion also failed:', restError.message);
+        throw new Error(`Both GraphQL and REST API failed: ${restError.message}`);
+      }
     }
-
-    const result = await response.json();
-    console.log('Kết quả xóa bài viết:', result);
-
-    if (result.errors) {
-      console.error('GraphQL errors:', result.errors);
-      return json({ 
-        error: 'GraphQL errors occurred', 
-        details: result.errors 
-      }, { status: 500 });
-    }
-
-    if (result.data?.articleDelete?.userErrors?.length > 0) {
-      const errorMessage = result.data.articleDelete.userErrors[0].message;
-      console.error('Lỗi khi xóa bài viết:', errorMessage);
-      return json({ error: errorMessage }, { status: 400 });
-    }
-
-    if (result.data?.articleDelete?.deletedArticleId) {
-      console.log('Đã xóa bài viết thành công:', result.data.articleDelete.deletedArticleId);
-      return json({ success: true, deletedId: result.data.articleDelete.deletedArticleId });
-    }
-
-    console.error('No deletion result found in response');
-    return json({ error: 'Không thể xóa bài viết - không có kết quả' }, { status: 500 });
 
   } catch (error) {
     console.error('=== DELETE ARTICLE ACTION ERROR ===');
     console.error('Error type:', error.constructor.name);
     console.error('Error message:', error.message);
     console.error('Error stack:', error.stack);
-    console.error('Full error object:', error);
     
     return json({ 
       error: 'Có lỗi xảy ra khi xóa bài viết', 

@@ -1,3 +1,11 @@
 name = "manage-proudct-post"
 type = "theme"
+handle = "manage-product-post-quickview"
+
+[capabilities]
+network_access = true
+block_progress = true
+
+[settings]
+type = "object"
 

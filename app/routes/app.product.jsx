@@ -1,28 +1,152 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useAppBridge } from '@shopify/app-bridge-react';
 import {
   Page,
   Layout,
   Card,
   Button,
-  DataTable,
-  Badge,
   Text,
-  EmptyState,
+  ChoiceList,
+  Select,
+  Checkbox,
+  Banner,
   Spinner,
-  Banner
+  BlockStack,
+  InlineStack,
+  Box,
+  Divider
 } from '@shopify/polaris';
 
 export default function ProductQuickviewConfig() {
   const [config, setConfig] = useState({
     enabled: true,
+    buttonText: "Quick View",
     position: 'below', // 'above' or 'below'
     show: {
       price: true,
       button: true,
       description: true,
       variant: true,
+      image: true,
+      title: true,
+      availability: true,
     },
+    styling: {
+      theme: 'light', // 'light', 'dark', 'auto'
+      animation: 'fade', // 'fade', 'slide', 'zoom'
+      overlay: true,
+      closeOnOverlayClick: true,
+      buttonColor: '#007bff',
+      buttonHoverColor: '#0056b3',
+      modalWidth: '500px',
+      modalMaxHeight: '80vh',
+      borderRadius: '8px',
+      shadow: '0 10px 25px rgba(0, 0, 0, 0.2)',
+      closeButtonColor: '#333',
+      closeButtonHoverBg: 'rgba(0, 0, 0, 0.1)',
+      titleColor: '#333',
+      priceColor: '#10b981',
+      descriptionColor: '#6b7280',
+      addToCartButtonColor: '#dc3545',
+      addToCartButtonHoverColor: '#c82333',
+      viewProductButtonColor: '#10b981',
+      viewProductButtonHoverColor: '#059669'
+    },
+    triggers: {
+      hover: false,
+      click: true,
+      button: true,
+    },
+    content: {
+      maxDescriptionLength: 150,
+      showAddToCart: true,
+      showViewProduct: true,
+      showAvailability: true,
+      showPrice: true,
+      showImage: true,
+      showTitle: true,
+      showDescription: true
+    }
   });
+
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState(null);
+  const app = useAppBridge();
+
+  // Load configuration from metafields on component mount
+  useEffect(() => {
+    loadConfiguration();
+  }, []);
+
+  const loadConfiguration = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('/api/product/config/load', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.config) {
+          setConfig(result.config);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading configuration:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveConfiguration = async () => {
+    setSaving(true);
+    setMessage(null);
+    
+    try {
+      const response = await fetch('/api/product/config/save', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ config }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setMessage({
+            type: 'success',
+            title: 'Configuration saved successfully!',
+            content: 'Quickview component will work with the new configuration.'
+          });
+        } else {
+          setMessage({
+            type: 'critical',
+            title: 'Error saving configuration',
+            content: result.error || 'Please try again.'
+          });
+        }
+      } else {
+        setMessage({
+          type: 'critical',
+          title: 'Error saving configuration',
+          content: 'Cannot connect to server.'
+        });
+      }
+    } catch (error) {
+      setMessage({
+        type: 'critical',
+        title: 'Error saving configuration',
+        content: error.message
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleToggle = (field) => {
     setConfig((prev) => ({
@@ -34,125 +158,295 @@ export default function ProductQuickviewConfig() {
     }));
   };
 
-  const handlePositionChange = (e) => {
+  const handleStylingChange = (field, value) => {
     setConfig((prev) => ({
       ...prev,
-      position: e.target.value,
+      styling: {
+        ...prev.styling,
+        [field]: value,
+      },
     }));
   };
 
-  const handleEnabledToggle = () => {
+  const handleTriggerChange = (field, value) => {
     setConfig((prev) => ({
       ...prev,
-      enabled: !prev.enabled,
+      triggers: {
+        ...prev.triggers,
+        [field]: value,
+      },
     }));
   };
+
+  const resetToDefault = () => {
+    setConfig({
+      enabled: true,
+      buttonText: "Quick View",
+      position: 'below',
+      show: {
+        price: true,
+        button: true,
+        description: true,
+        variant: true,
+        image: true,
+        title: true,
+        availability: true,
+      },
+      styling: {
+        theme: 'light',
+        animation: 'fade',
+        overlay: true,
+        closeOnOverlayClick: true,
+        buttonColor: '#007bff',
+        buttonHoverColor: '#0056b3',
+        modalWidth: '500px',
+        modalMaxHeight: '80vh',
+        borderRadius: '8px',
+        shadow: '0 10px 25px rgba(0, 0, 0, 0.2)',
+        closeButtonColor: '#333',
+        closeButtonHoverBg: 'rgba(0, 0, 0, 0.1)',
+        titleColor: '#333',
+        priceColor: '#10b981',
+        descriptionColor: '#6b7280',
+        addToCartButtonColor: '#dc3545',
+        addToCartButtonHoverColor: '#c82333',
+        viewProductButtonColor: '#10b981',
+        viewProductButtonHoverColor: '#059669'
+      },
+      triggers: {
+        hover: false,
+        click: true,
+        button: true,
+      },
+      content: {
+        maxDescriptionLength: 150,
+        showAddToCart: true,
+        showViewProduct: true,
+        showAvailability: true,
+        showPrice: true,
+        showImage: true,
+        showTitle: true,
+        showDescription: true
+      }
+    });
+  };
+
+  if (loading) {
+    return (
+      <Page>
+        <Layout>
+          <Layout.Section>
+            <Card>
+              <div style={{ textAlign: 'center', padding: '4rem' }}>
+                <Spinner size="large" />
+                <div style={{ marginTop: '1rem' }}>
+                  <Text variant="bodyMd" as="p">Loading configuration...</Text>
+                </div>
+              </div>
+            </Card>
+          </Layout.Section>
+        </Layout>
+      </Page>
+    );
+  }
 
   return (
-    <div style={styles.wrapper}>
-      <h2 style={styles.title}>⚙️ Cấu hình Quickview sản phẩm</h2>
+    <Page
+      title="Product Quickview Configuration"
+      primaryAction={{
+        content: 'Save Configuration',
+        onAction: saveConfiguration,
+        loading: saving,
+        disabled: saving,
+      }}
+      secondaryActions={[
+        {
+          content: 'Reset to Default',
+          onAction: resetToDefault,
+          disabled: saving,
+        },
+      ]}
+    >
+      {message && (
+        <Layout.Section>
+          <Banner
+            status={message.type}
+            title={message.title}
+            onDismiss={() => setMessage(null)}
+          >
+            <p>{message.content}</p>
+          </Banner>
+        </Layout.Section>
+      )}
 
-      {/* Bật/tắt Quickview */}
-      <div style={styles.section}>
-        <label>
-          <input
-            type="checkbox"
-            checked={config.enabled}
-            onChange={handleEnabledToggle}
-          />
-          <span style={styles.label}> Bật Quickview</span>
-        </label>
-      </div>
+      <Layout>
+        {/* Main Configuration */}
+        <Layout.Section>
+          <Card>
+            <BlockStack gap="400">
+              <Text variant="headingMd" as="h2">Main Configuration</Text>
+              
+              <Checkbox
+                label="Enable Quickview component"
+                checked={config.enabled}
+                onChange={() => setConfig(prev => ({ ...prev, enabled: !prev.enabled }))}
+              />
 
-      {/* Vị trí hiển thị */}
-      <div style={styles.section}>
-        <label style={styles.label}>Vị trí hiển thị Quickview:</label>
-        <select
-          value={config.position}
-          onChange={handlePositionChange}
-          style={styles.select}
-        >
-          <option value="above">Trên ảnh sản phẩm</option>
-          <option value="below">Dưới ảnh sản phẩm</option>
-        </select>
-      </div>
+              <Select
+                label="Quickview Display Position"
+                options={[
+                  { label: 'Above product image', value: 'above' },
+                  { label: 'Below product image', value: 'below' },
+                  { label: 'Right of product image', value: 'right' },
+                  { label: 'Left of product image', value: 'left' },
+                ]}
+                value={config.position}
+                onChange={(value) => setConfig(prev => ({ ...prev, position: value }))}
+              />
+            </BlockStack>
+          </Card>
+        </Layout.Section>
 
-      {/* Các thành phần hiển thị */}
-      <div style={styles.section}>
-        <label>
-          <input
-            type="checkbox"
-            checked={config.show.price}
-            onChange={() => handleToggle('price')}
-          />
-          <span style={styles.label}> Hiển thị Giá</span>
-        </label>
-        <br />
-        <label>
-          <input
-            type="checkbox"
-            checked={config.show.button}
-            onChange={() => handleToggle('button')}
-          />
-          <span style={styles.label}> Hiển thị Nút Mua</span>
-        </label>
-        <br />
-        <label>
-          <input
-            type="checkbox"
-            checked={config.show.description}
-            onChange={() => handleToggle('description')}
-          />
-          <span style={styles.label}> Hiển thị Mô tả</span>
-        </label>
-        <br />
-        <label>
-          <input
-            type="checkbox"
-            checked={config.show.variant}
-            onChange={() => handleToggle('variant')}
-          />
-          <span style={styles.label}> Hiển thị Biến thể</span>
-        </label>
-      </div>
+        {/* Display Components */}
+        <Layout.Section>
+          <Card>
+            <BlockStack gap="400">
+              <Text variant="headingMd" as="h2">Display Components</Text>
+              
+              <InlineStack gap="400" wrap>
+                <Checkbox
+                  label="Show product title"
+                  checked={config.show.title}
+                  onChange={() => handleToggle('title')}
+                />
+                <Checkbox
+                  label="Show product image"
+                  checked={config.show.image}
+                  onChange={() => handleToggle('image')}
+                />
+                <Checkbox
+                  label="Show price"
+                  checked={config.show.price}
+                  onChange={() => handleToggle('price')}
+                />
+                <Checkbox
+                  label="Show buy button"
+                  checked={config.show.button}
+                  onChange={() => handleToggle('button')}
+                />
+                <Checkbox
+                  label="Show description"
+                  checked={config.show.description}
+                  onChange={() => handleToggle('description')}
+                />
+                <Checkbox
+                  label="Show variants"
+                  checked={config.show.variant}
+                  onChange={() => handleToggle('variant')}
+                />
+                <Checkbox
+                  label="Show availability"
+                  checked={config.show.availability}
+                  onChange={() => handleToggle('availability')}
+                />
+              </InlineStack>
+            </BlockStack>
+          </Card>
+        </Layout.Section>
 
-      {/* Hiển thị cấu hình hiện tại (cho dev/debug) */}
-      <pre style={styles.codeBlock}>
-        {JSON.stringify(config, null, 2)}
-      </pre>
-    </div>
+        {/* Styling Configuration */}
+        <Layout.Section>
+          <Card>
+            <BlockStack gap="400">
+              <Text variant="headingMd" as="h2">Styling Configuration</Text>
+              
+              <InlineStack gap="400" wrap>
+                <Select
+                  label="Theme"
+                  options={[
+                    { label: 'Light', value: 'light' },
+                    { label: 'Dark', value: 'dark' },
+                    { label: 'Auto', value: 'auto' },
+                  ]}
+                  value={config.styling.theme}
+                  onChange={(value) => handleStylingChange('theme', value)}
+                />
+
+                <Select
+                  label="Animation"
+                  options={[
+                    { label: 'Fade', value: 'fade' },
+                    { label: 'Slide', value: 'slide' },
+                    { label: 'Zoom', value: 'zoom' },
+                  ]}
+                  value={config.styling.animation}
+                  onChange={(value) => handleStylingChange('animation', value)}
+                />
+              </InlineStack>
+
+              <InlineStack gap="400" wrap>
+                <Checkbox
+                  label="Show background overlay"
+                  checked={config.styling.overlay}
+                  onChange={(value) => handleStylingChange('overlay', value)}
+                />
+                <Checkbox
+                  label="Close on overlay click"
+                  checked={config.styling.closeOnOverlayClick}
+                  onChange={(value) => handleStylingChange('closeOnOverlayClick', value)}
+                />
+              </InlineStack>
+            </BlockStack>
+          </Card>
+        </Layout.Section>
+
+        {/* Trigger Configuration */}
+        <Layout.Section>
+          <Card>
+            <BlockStack gap="400">
+              <Text variant="headingMd" as="h2">Trigger Methods</Text>
+              
+              <InlineStack gap="400" wrap>
+                <Checkbox
+                  label="Activate on hover"
+                  checked={config.triggers.hover}
+                  onChange={(value) => handleTriggerChange('hover', value)}
+                />
+                <Checkbox
+                  label="Activate on click"
+                  checked={config.triggers.click}
+                  onChange={(value) => handleTriggerChange('click', value)}
+                />
+                <Checkbox
+                  label="Show Quickview button"
+                  checked={config.triggers.button}
+                  onChange={(value) => handleTriggerChange('button', value)}
+                />
+              </InlineStack>
+            </BlockStack>
+          </Card>
+        </Layout.Section>
+
+        {/* Configuration Preview */}
+        <Layout.Section>
+          <Card>
+            <BlockStack gap="400">
+              <Text variant="headingMd" as="h2">Current Configuration</Text>
+              <Box padding="400" background="bg-surface-secondary" borderRadius="200">
+                <pre style={{ 
+                  fontSize: '12px', 
+                  lineHeight: '1.4',
+                  margin: 0,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word'
+                }}>
+                  {JSON.stringify(config, null, 2)}
+                </pre>
+              </Box>
+            </BlockStack>
+          </Card>
+        </Layout.Section>
+      </Layout>
+    </Page>
   );
 }
-
-const styles = {
-  wrapper: {
-    maxWidth: '500px',
-    margin: '2rem auto',
-    padding: '1.5rem',
-    border: '1px solid #ccc',
-    borderRadius: '8px',
-    fontFamily: 'sans-serif',
-    backgroundColor: '#fafafa',
-  },
-  title: {
-    marginBottom: '1rem',
-  },
-  section: {
-    marginBottom: '1rem',
-  },
-  label: {
-    marginLeft: '0.5rem',
-  },
-  select: {
-    display: 'block',
-    marginTop: '0.5rem',
-    padding: '0.25rem',
-  },
-  codeBlock: {
-    marginTop: '2rem',
-    background: '#eee',
-    padding: '1rem',
-    borderRadius: '4px',
-    fontSize: '14px',
-  },
-};
