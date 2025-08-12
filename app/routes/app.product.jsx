@@ -1,4 +1,16 @@
 import React, { useState } from 'react';
+import {
+  Page,
+  Layout,
+  Card,
+  Button,
+  DataTable,
+  Badge,
+  Text,
+  EmptyState,
+  Spinner,
+  Banner
+} from '@shopify/polaris';
 
 export default function ProductQuickviewConfig() {
   const [config, setConfig] = useState({

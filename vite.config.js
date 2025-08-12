@@ -68,6 +68,12 @@ export default defineConfig({
     assetsInlineLimit: 0,
   },
   optimizeDeps: {
-    include: ["@shopify/app-bridge-react", "@shopify/polaris"],
+    include: [
+      "@shopify/app-bridge-react", 
+      "@shopify/polaris",
+      "@dnd-kit/core",
+      "@dnd-kit/sortable",
+      "@dnd-kit/utilities"
+    ],
   },
 });
