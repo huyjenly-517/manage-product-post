@@ -4,7 +4,7 @@ client_id = "84ea256426b476e9df7b2e91db506da8"
 name = "manage-product-post"
 handle = "manage-product-post"
 # Sử dụng domain trycloudflare.com cho app (không thể dùng domain của store)
-application_url = "https://becoming-wx-opposed-finish.trycloudflare.com"
+application_url = "https://thai-this-robin-beam.trycloudflare.com"
 embedded = true
 
 [build]
@@ -28,7 +28,7 @@ scopes = "write_products,read_content,write_content,read_files,write_files"
 
 [auth]
 # Sử dụng domain trycloudflare.com cho authentication
-redirect_urls = ["https://becoming-wx-opposed-finish.trycloudflare.com/auth/callback", "https://becoming-wx-opposed-finish.trycloudflare.com/auth/shopify/callback", "https://becoming-wx-opposed-finish.trycloudflare.com/api/auth/callback"]
+redirect_urls = ["https://thai-this-robin-beam.trycloudflare.com/auth/callback", "https://thai-this-robin-beam.trycloudflare.com/auth/shopify/callback", "https://thai-this-robin-beam.trycloudflare.com/api/auth/callback"]
 
 [pos]
 embedded = false
