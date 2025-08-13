@@ -1,0 +1,920 @@
+<!-- Quickview App Extension Snippet -->
+<!-- Simple and safe version that won't break site loading -->
+
+<script>
+  // Simple quickview functionality
+  (function() {
+    'use strict';
+    
+    // Global variables
+    let quickviewConfig = {
+      enabled: false,
+      buttonText: 'Quick View',
+      position: 'below'
+    };
+    let quickviewEnabled = false;
+    let quickviewInitialized = false;
+    let observer = null;
+    let isProcessing = false; // Add processing flag to prevent re-initialization
+    let lastInitTime = 0; // Track last initialization time
+    const MIN_INIT_INTERVAL = 1000; // Minimum 1 second between initializations
+
+    // Store app domain for future API calls
+    let appDomain = null;
+    
+    // Track if quickview is enabled
+    // let quickviewEnabled = false; // Moved to global
+    
+    // Track if quickview has been initialized
+    // let quickviewInitialized = false; // Moved to global
+    
+    // MutationObserver to watch for DOM changes
+    // let observer = null; // Moved to global
+
+    // Load configuration from app using API call
+    function loadConfig() {
+      try {
+        console.log('Loading config from app API');
+        
+        // Try to get the current app domain from the page
+        const currentDomain = window.location.origin;
+        console.log('Current domain:', currentDomain);
+        
+        // Try API endpoint
+        const quickviewUrl = `${currentDomain}/api/quickview/config`;
+        console.log('Trying API endpoint:', quickviewUrl);
+        
+        callQuickviewAPI(quickviewUrl);
+        
+        // Fallback timeout - if API fails after 3 seconds, use default config
+        setTimeout(() => {
+          if (!quickviewConfig.enabled) {
+            console.log('API timeout - using default config');
+            useDefaultConfig();
+          }
+        }, 3000); // 3 second timeout
+        
+      } catch (error) {
+        console.log('Quickview config error:', error);
+        console.log('Using default config - enabling quickview');
+        useDefaultConfig();
+      }
+    }
+
+    // Call the quickview API
+    function callQuickviewAPI(appUrl) {
+      console.log('=== CALLING QUICKVIEW API ===');
+      console.log('API URL:', appUrl);
+      console.log('Request timestamp:', new Date().toISOString());
+      
+      fetch(appUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        mode: 'cors',
+        cache: 'no-cache'
+      })
+      .then(response => {
+        console.log('=== API RESPONSE RECEIVED ===');
+        console.log('Response status:', response.status);
+        console.log('Response statusText:', response.statusText);
+        console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+        console.log('Response ok:', response.ok);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        // Try to parse response as JSON
+        return response.text().then(text => {
+          console.log('Raw response text:', text);
+          
+          try {
+            const jsonData = JSON.parse(text);
+            console.log('Parsed JSON data:', jsonData);
+            return jsonData;
+          } catch (parseError) {
+            console.error('JSON parse error:', parseError);
+            console.error('Failed to parse response as JSON');
+            throw new Error('Invalid JSON response');
+          }
+        });
+      })
+      .then(result => {
+        console.log('=== PROCESSING API RESULT ===');
+        console.log('Full result:', result);
+        console.log('Result type:', typeof result);
+        console.log('Result keys:', Object.keys(result || {}));
+        
+        // Check if result has the expected structure
+        if (!result) {
+          console.error('Result is null or undefined');
+          throw new Error('Empty response from API');
+        }
+        
+        if (typeof result !== 'object') {
+          console.error('Result is not an object:', typeof result);
+          throw new Error('Invalid response format');
+        }
+        
+        console.log('Result.success:', result.success);
+        console.log('Result.config:', result.config);
+        console.log('Result.message:', result.message);
+        
+        if (result.success && result.config) {
+          const oldEnabled = quickviewConfig.enabled;
+          const oldConfig = { ...quickviewConfig };
+          
+          console.log('=== APPLYING API CONFIG ===');
+          console.log('Old config:', oldConfig);
+          console.log('API config:', result.config);
+          
+          // Apply config from API
+          quickviewConfig = { ...quickviewConfig, ...result.config };
+          quickviewEnabled = quickviewConfig.enabled;
+          
+          console.log('Final config:', quickviewConfig);
+          console.log('Enabled changed from', oldEnabled, 'to', quickviewConfig.enabled);
+          
+          // If enabled state changed, force reinitialize
+          if (oldEnabled !== quickviewConfig.enabled) {
+            console.log('Enabled state changed, removing all buttons');
+            removeAllButtons();
+          }
+          
+          console.log('=== INITIALIZING QUICKVIEW ===');
+          initQuickview();
+        } else {
+          console.error('=== API RESPONSE INVALID ===');
+          console.error('Response success:', result.success);
+          console.error('Response config:', result.config);
+          console.error('Response message:', result.message);
+          console.error('Response error:', result.error);
+          
+          // Fallback to default config if API fails
+          console.log('Using fallback config due to invalid API response');
+          useDefaultConfig();
+        }
+      })
+      .catch(error => {
+        console.error('=== API CALL FAILED ===');
+        console.error('Error name:', error.name);
+        console.error('Error message:', error.message);
+        console.error('Error stack:', error.stack);
+        console.log('API failed, using default config');
+        
+        // Fallback to default config if API fails
+        useDefaultConfig();
+      });
+    }
+
+    // Use default configuration
+    function useDefaultConfig() {
+      quickviewConfig = {
+        enabled: true,
+        buttonText: "Quick View",
+        position: 'below',
+        buttonStyle: 'primary',
+        buttonSize: 'medium',
+        showIcon: true,
+        icon: "👁️",
+        customColor: "",
+        textColor: "",
+        showQuickviewIcon: false,
+        quickviewIcon: "⚡"
+      };
+      
+      quickviewEnabled = true;
+      console.log('Using default config:', quickviewConfig);
+      initQuickview();
+    }
+
+    // Create quickview button
+    function createButton(element) {
+      if (!quickviewConfig.enabled) return;
+      
+      // Check if button exists - more thorough check
+      const existingButton = element.querySelector('.quickview-button');
+      if (existingButton) {
+        console.log('Button already exists in element, skipping');
+        return;
+      }
+      
+      // Check if this element or any of its parents already has quickview initialized
+      const hasButtonInParent = element.closest('[data-quickview-initialized]');
+      if (hasButtonInParent) {
+        console.log('Parent already has quickview initialized, skipping');
+        return;
+      }
+      
+      // Check if this element already has the attribute
+      if (element.hasAttribute('data-quickview-initialized')) {
+        console.log('Element already marked as initialized, skipping');
+        return;
+      }
+      
+      // Mark this element as initialized IMMEDIATELY to prevent duplicate processing
+      element.setAttribute('data-quickview-initialized', 'true');
+      
+      const button = document.createElement('button');
+      button.className = 'quickview-button';
+      button.type = 'button'; // Ensure it's a button, not submit
+      button.textContent = quickviewConfig.buttonText || 'Quick View';
+      
+      // Set inline styles to ensure they work
+      button.style.cssText = `
+        background: #007bff !important;
+        color: white !important;
+        border: none !important;
+        padding: 8px 16px !important;
+        border-radius: 4px !important;
+        cursor: pointer !important;
+        font-size: 14px !important;
+        font-weight: 500 !important;
+        margin-top: 8px !important;
+        width: 100% !important;
+        transition: background-color 0.2s ease !important;
+        font-family: inherit !important;
+        display: block !important;
+        text-align: center !important;
+        text-decoration: none !important;
+        pointer-events: auto !important;
+        position: relative !important;
+        z-index: 1000 !important;
+        user-select: none !important;
+        -webkit-user-select: none !important;
+        -moz-user-select: none !important;
+        -ms-user-select: none !important;
+      `;
+      
+      // Add click handler
+      button.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('Quickview button clicked!');
+        openModal(element);
+      });
+      
+      // Add button to DOM IMMEDIATELY
+      element.appendChild(button);
+      
+      console.log('Quickview button created and added to DOM:', button);
+    }
+
+    // Open quickview modal
+    function openModal(element) {
+      try {
+        console.log('=== OPENING MODAL ===');
+        console.log('Element:', element);
+        console.log('Element HTML:', element.outerHTML);
+        
+        // Store original overflow value
+        const originalOverflow = document.body.style.overflow;
+        console.log('Original overflow:', originalOverflow);
+        
+        // Close existing modal
+        const existing = document.querySelector('.quickview-modal');
+        if (existing) {
+          console.log('Removing existing modal');
+          existing.remove();
+        }
+
+        // Get product data
+        const title = element.querySelector('h3, h4, .product-title')?.textContent?.trim() || 'Product';
+        const price = element.querySelector('.price, .product-price')?.textContent?.trim() || '';
+        const image = element.querySelector('img')?.src || '';
+        const link = element.querySelector('a[href*="/products/"]')?.href || '';
+
+        console.log('Product data found:', { title, price, image, link });
+
+        // Create modal container
+        const modal = document.createElement('div');
+        modal.className = 'quickview-modal';
+        modal.id = 'quickview-modal-' + Date.now();
+        modal.style.cssText = `
+          position: fixed !important;
+          top: 0 !important;
+          left: 0 !important;
+          right: 0 !important;
+          bottom: 0 !important;
+          z-index: 999999 !important;
+          background: rgba(0, 0, 0, 0.5) !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          font-family: inherit !important;
+        `;
+
+        // Create modal content
+        const content = document.createElement('div');
+        content.className = 'quickview-modal-content';
+        content.style.cssText = `
+          background: white !important;
+          padding: 24px !important;
+          max-width: 500px !important;
+          max-height: 80vh !important;
+          overflow: auto !important;
+          border-radius: 8px !important;
+          position: relative !important;
+          box-shadow: 0 10px 25px rgba(0,0,0,0.2) !important;
+          z-index: 1000000 !important;
+        `;
+
+        // Create close button
+        const closeBtn = document.createElement('button');
+        closeBtn.innerHTML = '×';
+        closeBtn.className = 'quickview-close-btn';
+        closeBtn.style.cssText = `
+          position: absolute !important;
+          top: 12px !important;
+          right: 12px !important;
+          background: none !important;
+          border: none !important;
+          font-size: 24px !important;
+          cursor: pointer !important;
+          color: #333 !important;
+          width: 30px !important;
+          height: 30px !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          z-index: 1000001 !important;
+        `;
+        
+        // Function to close modal and restore scrolling
+        const closeModal = () => {
+          console.log('Closing modal and restoring overflow to:', originalOverflow);
+          modal.remove();
+          document.body.style.overflow = originalOverflow || '';
+          document.removeEventListener('keydown', escapeHandler);
+        };
+        
+        // Close button event
+        closeBtn.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          console.log('Close button clicked');
+          closeModal();
+        };
+
+        // Build content HTML
+        let html = '';
+        if (image) html += `<img src="${image}" style="max-width: 100%; margin-bottom: 16px; border-radius: 4px; display: block;">`;
+        if (title) html += `<h3 style="margin: 0 0 16px 0; color: #333; font-size: 20px;">${title}</h3>`;
+        if (price) html += `<div style="margin-bottom: 16px; font-size: 18px; font-weight: 600; color: #10b981;">${price}</div>`;
+        if (link) html += `<a href="${link}" style="display: block; text-align: center; background: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 500; margin-top: 16px;">View Product Details</a>`;
+
+        content.innerHTML = html;
+        content.appendChild(closeBtn);
+        modal.appendChild(content);
+
+        // Close on overlay click
+        modal.onclick = (e) => {
+          if (e.target === modal) {
+            console.log('Overlay clicked, closing modal');
+            closeModal();
+          }
+        };
+
+        // Escape key handler
+        const escapeHandler = (e) => {
+          if (e.key === 'Escape') {
+            console.log('Escape key pressed, closing modal');
+            closeModal();
+          }
+        };
+        document.addEventListener('keydown', escapeHandler);
+
+        // Add modal to page
+        console.log('Adding modal to page...');
+        document.body.appendChild(modal);
+        document.body.style.overflow = 'hidden';
+
+        console.log('Modal added successfully!');
+        console.log('Modal element:', modal);
+        console.log('Modal in DOM:', document.body.contains(modal));
+
+        // Cleanup when modal is removed
+        modal.addEventListener('remove', () => {
+          console.log('Modal removed event triggered');
+          document.body.style.overflow = originalOverflow || '';
+          document.removeEventListener('keydown', escapeHandler);
+        });
+        
+      } catch (error) {
+        console.error('Error opening modal:', error);
+        console.error('Error stack:', error.stack);
+      }
+    }
+
+    // Force remove all quickview buttons
+    function removeAllButtons() {
+      try {
+        const buttons = document.querySelectorAll('.quickview-button');
+        buttons.forEach(btn => btn.remove());
+
+        const markers = document.querySelectorAll('[data-quickview-initialized]');
+        markers.forEach(el => el.removeAttribute('data-quickview-initialized'));
+        
+        // Also clean up processing markers
+        const processingMarkers = document.querySelectorAll('[data-quickview-processing]');
+        processingMarkers.forEach(el => el.removeAttribute('data-quickview-processing'));
+
+        console.log(`Removed ${buttons.length} quickview buttons, ${markers.length} init markers, and ${processingMarkers.length} processing markers`);
+      } catch (error) {
+        console.error('Error removing buttons:', error);
+      }
+    }
+
+    // Initialize quickview
+    function initQuickview() {
+      try {
+        // Prevent multiple simultaneous initializations
+        if (isProcessing) {
+          console.log('Quickview initialization already in progress, skipping');
+          return;
+        }
+        
+        // Check minimum interval between initializations
+        const now = Date.now();
+        if (now - lastInitTime < MIN_INIT_INTERVAL) {
+          console.log('Too soon to reinitialize quickview, skipping');
+          return;
+        }
+        
+        console.log('Initializing quickview, enabled:', quickviewConfig.enabled);
+        
+        // Set processing flag
+        isProcessing = true;
+        lastInitTime = now;
+        
+        // Set global flag
+        quickviewEnabled = quickviewConfig.enabled;
+        
+        // If already initialized and enabled, don't reinitialize
+        if (quickviewInitialized && quickviewEnabled) {
+          console.log('Quickview already initialized and enabled, skipping');
+          isProcessing = false;
+          return;
+        }
+        
+        // Remove existing buttons and cleanup
+        document.querySelectorAll('.quickview-button').forEach(btn => {
+          btn.remove();
+        });
+        
+        // Remove initialization markers
+        document.querySelectorAll('[data-quickview-initialized]').forEach(el => {
+          el.removeAttribute('data-quickview-initialized');
+        });
+        
+        // If disabled, don't create any buttons
+        if (!quickviewConfig.enabled) {
+          console.log('Quickview is disabled, not creating buttons');
+          if (observer) {
+            observer.disconnect();
+            observer = null;
+          }
+          quickviewInitialized = false;
+          isProcessing = false;
+          return;
+        }
+        
+        // Setup observer to watch for DOM changes
+        setupObserver();
+        
+        // Find product elements - be more specific to avoid duplicates
+        const selectors = [
+          '.card__content:not([data-quickview-initialized])',
+          '.card__information:not([data-quickview-initialized])',
+          '.product-item:not([data-quickview-initialized])',
+          '.grid-product:not([data-quickview-initialized])', 
+          '.product-card:not([data-quickview-initialized])'
+        ];
+        
+        let totalButtons = 0;
+        selectors.forEach(selector => {
+          try {
+            const elements = document.querySelectorAll(selector);
+            console.log(`Found ${elements.length} elements for selector: ${selector}`);
+            
+            elements.forEach(element => {
+              // Triple check - element should not have button and not be initialized
+              // Also check if we're currently processing this element
+              if (element && 
+                  !element.querySelector('.quickview-button') && 
+                  !element.hasAttribute('data-quickview-initialized') &&
+                  !element.closest('[data-quickview-initialized]') &&
+                  !element.hasAttribute('data-quickview-processing')) {
+                
+                // Mark as processing to prevent duplicate handling
+                element.setAttribute('data-quickview-processing', 'true');
+                
+                console.log('Creating button for element:', element);
+                createButton(element);
+                totalButtons++;
+                
+                // Remove processing marker after successful creation
+                element.removeAttribute('data-quickview-processing');
+              } else {
+                console.log('Skipping element (already has button, initialized, or processing):', element);
+              }
+            });
+          } catch (error) {
+            console.error('Error processing selector:', selector, error);
+          }
+        });
+        
+        // Mark as initialized
+        quickviewInitialized = true;
+        
+        console.log(`Quickview initialized with ${totalButtons} buttons`);
+      } catch (error) {
+        console.error('Error initializing quickview:', error);
+      } finally {
+        // Always reset processing flag
+        isProcessing = false;
+      }
+    }
+
+    // Enable quickview immediately for testing
+    function enableQuickviewImmediately() {
+      console.log('Enabling quickview immediately for testing');
+      quickviewConfig.enabled = true;
+      quickviewConfig.buttonText = "Quick View";
+      quickviewConfig.position = 'below';
+      quickviewEnabled = true;
+      
+      // Force initialization
+      removeAllButtons();
+      initQuickview();
+      setupObserver();
+      
+      console.log('Quickview enabled and initialized');
+    }
+    
+    // Setup MutationObserver to watch for DOM changes
+    function setupObserver() {
+      if (observer) {
+        observer.disconnect();
+      }
+      
+      let reinitTimeout = null;
+      let pendingReinit = false; // Track if reinit is pending
+      
+      observer = new MutationObserver((mutations) => {
+        if (!quickviewEnabled || isProcessing || pendingReinit) return;
+        
+        let shouldReinit = false;
+        
+        mutations.forEach((mutation) => {
+          // Check if quickview buttons were removed
+          mutation.removedNodes.forEach((node) => {
+            if (node.nodeType === Node.ELEMENT_NODE) {
+              if (node.classList && node.classList.contains('quickview-button')) {
+                console.log('Quickview button removed, will reinitialize');
+                shouldReinit = true;
+              }
+              // Also check child nodes
+              if (node.querySelector && node.querySelector('.quickview-button')) {
+                console.log('Quickview button in child removed, will reinitialize');
+                shouldReinit = true;
+              }
+            }
+          });
+          
+          // Check if product elements were added
+          if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+            mutation.addedNodes.forEach((node) => {
+              if (node.nodeType === Node.ELEMENT_NODE) {
+                if (node.classList && (
+                  node.classList.contains('product-item') ||
+                  node.classList.contains('grid-product') ||
+                  node.classList.contains('product-card') ||
+                  node.classList.contains('card__content') ||
+                  node.classList.contains('card__information')
+                )) {
+                  console.log('New product element added, will reinitialize');
+                  shouldReinit = true;
+                }
+              }
+            });
+          }
+        });
+        
+        if (shouldReinit && !pendingReinit) {
+          pendingReinit = true;
+          
+          // Debounce reinitialization to avoid excessive calls
+          if (reinitTimeout) {
+            clearTimeout(reinitTimeout);
+          }
+          
+          reinitTimeout = setTimeout(() => {
+            if (quickviewEnabled && !isProcessing) {
+              console.log('Reinitializing quickview due to DOM changes');
+              initQuickview();
+            }
+            pendingReinit = false;
+          }, 1000); // Increased delay to 1 second
+        }
+      });
+      
+      // Start observing
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+      
+      console.log('MutationObserver setup complete');
+    }
+
+    // Start when DOM is ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', loadConfig);
+    } else {
+      loadConfig();
+    }
+
+    // Single fallback - only if nothing else worked
+    setTimeout(() => {
+      if (!quickviewConfig.enabled) {
+        console.log('Final fallback - using default config');
+        useDefaultConfig();
+      }
+    }, 5000); // 5 second final fallback only
+
+    // Expose for debugging
+    window.QuickviewApp = {
+      init: initQuickview,
+      config: () => quickviewConfig,
+      removeAll: removeAllButtons,
+      forceInit: () => {
+        removeAllButtons();
+        initQuickview();
+      },
+      enableNow: enableQuickviewImmediately,
+      testModal: () => {
+        console.log('Testing modal functionality');
+        const testElement = document.createElement('div');
+        testElement.innerHTML = '<h3>Test Product</h3><div class="price">$99.99</div><img src="https://via.placeholder.com/300x200" alt="Test"><a href="/products/test">Test Link</a>';
+        openModal(testElement);
+      },
+      testScroll: () => {
+        console.log('=== SCROLL TEST ===');
+        console.log('Body overflow before:', document.body.style.overflow);
+        console.log('Body computed overflow:', window.getComputedStyle(document.body).overflow);
+        console.log('Body scrollTop:', document.body.scrollTop);
+        console.log('Document scrollTop:', document.documentElement.scrollTop);
+        
+        // Try to scroll
+        window.scrollTo(0, 100);
+        setTimeout(() => {
+          console.log('Body scrollTop after scroll:', document.body.scrollTop);
+          console.log('Document scrollTop after scroll:', document.documentElement.scrollTop);
+        }, 100);
+      },
+      restoreScroll: () => {
+        console.log('Restoring scroll manually');
+        document.body.style.overflow = '';
+        document.documentElement.style.overflow = '';
+        console.log('Scroll restored');
+      },
+      testClick: () => {
+        console.log('Testing click functionality');
+        const buttons = document.querySelectorAll('.quickview-button');
+        if (buttons.length > 0) {
+          console.log('Found', buttons.length, 'buttons, testing first one');
+          const button = buttons[0];
+          console.log('Button element:', button);
+          console.log('Button onclick:', button.onclick);
+          console.log('Button event listeners:', button.getEventListeners ? button.getEventListeners() : 'Not available');
+          console.log('Button style pointer-events:', button.style.pointerEvents);
+          console.log('Button computed pointer-events:', window.getComputedStyle(button).pointerEvents);
+          
+          // Try to click
+          button.click();
+        } else {
+          console.log('No buttons found');
+        }
+      },
+      debugButton: () => {
+        const buttons = document.querySelectorAll('.quickview-button');
+        console.log('=== BUTTON DEBUG INFO ===');
+        console.log('Total buttons found:', buttons.length);
+        
+        buttons.forEach((button, index) => {
+          console.log(`Button ${index + 1}:`, {
+            element: button,
+            className: button.className,
+            onclick: button.onclick,
+            style: button.style.cssText,
+            computedStyle: window.getComputedStyle(button),
+            parentElement: button.parentElement,
+            isVisible: button.offsetWidth > 0 && button.offsetHeight > 0
+          });
+        });
+      },
+      reloadConfig: () => {
+        console.log('Reloading quickview configuration');
+        loadConfig();
+      },
+      setConfig: (newConfig) => {
+        console.log('Setting new config:', newConfig);
+        const oldEnabled = quickviewConfig.enabled;
+        
+        quickviewConfig = { ...quickviewConfig, ...newConfig };
+        quickviewEnabled = quickviewConfig.enabled;
+        
+        if (oldEnabled !== quickviewConfig.enabled) {
+          console.log('Enabled state changed, removing all buttons');
+          removeAllButtons();
+        }
+        
+        initQuickview();
+      },
+      cleanup: () => {
+        console.log('Cleaning up all quickview elements');
+        // Remove all buttons
+        document.querySelectorAll('.quickview-button').forEach(btn => btn.remove());
+        // Remove all markers
+        document.querySelectorAll('[data-quickview-initialized]').forEach(el => {
+          el.removeAttribute('data-quickview-initialized');
+        });
+        // Remove processing markers
+        document.querySelectorAll('[data-quickview-processing]').forEach(el => {
+          el.removeAttribute('data-quickview-processing');
+        });
+        // Reset flags
+        quickviewInitialized = false;
+        isProcessing = false;
+        console.log('Cleanup complete, ready to reinitialize');
+      },
+      testAPI: () => {
+        console.log('=== TESTING API ENDPOINT ===');
+        const currentDomain = window.location.origin;
+        const apiUrl = `${currentDomain}/api/quickview/config`;
+        
+        console.log('Testing API URL:', apiUrl);
+        console.log('Current domain:', currentDomain);
+        
+        // Test the API endpoint
+        fetch(apiUrl, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          mode: 'cors',
+          cache: 'no-cache'
+        })
+        .then(response => {
+          console.log('=== TEST API RESPONSE ===');
+          console.log('Status:', response.status);
+          console.log('StatusText:', response.statusText);
+          console.log('Headers:', Object.fromEntries(response.headers.entries()));
+          console.log('OK:', response.ok);
+          
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+          
+          return response.text();
+        })
+        .then(text => {
+          console.log('=== RAW RESPONSE ===');
+          console.log('Response text:', text);
+          
+          try {
+            const data = JSON.parse(text);
+            console.log('=== PARSED JSON ===');
+            console.log('Parsed data:', data);
+            console.log('Data type:', typeof data);
+            console.log('Data keys:', Object.keys(data || {}));
+            console.log('Success:', data.success);
+            console.log('Config:', data.config);
+            console.log('Message:', data.message);
+            
+            if (data.success && data.config) {
+              console.log('✅ API working correctly!');
+            } else {
+              console.log('❌ API response invalid');
+            }
+          } catch (parseError) {
+            console.error('❌ JSON parse error:', parseError);
+          }
+        })
+        .catch(error => {
+          console.error('❌ API test failed:', error);
+          console.error('Error details:', {
+            name: error.name,
+            message: error.message,
+            stack: error.stack
+          });
+        });
+      }
+    };
+  })();
+</script>
+
+<style>
+  .quickview-button {
+    background: #007bff !important;
+    color: white !important;
+    border: none !important;
+    padding: 8px 16px !important;
+    border-radius: 4px !important;
+    cursor: pointer !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    margin-top: 8px !important;
+    width: 100% !important;
+    transition: background-color 0.2s ease !important;
+    font-family: inherit !important;
+    display: block !important;
+    text-align: center !important;
+    text-decoration: none !important;
+    pointer-events: auto !important;
+    position: relative !important;
+    z-index: 1000 !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+  }
+  
+  .quickview-button:hover {
+    background: #0056b3 !important;
+    text-decoration: none !important;
+    cursor: pointer !important;
+  }
+  
+  .quickview-button:active {
+    background: #004085 !important;
+    transform: translateY(1px) !important;
+  }
+  
+  .quickview-button:focus {
+    outline: 2px solid #007bff !important;
+    outline-offset: 2px !important;
+  }
+  
+  .quickview-modal {
+    font-family: inherit !important;
+    z-index: 999999 !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    background: rgba(0, 0, 0, 0.5) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    pointer-events: auto !important;
+    overflow: hidden !important;
+  }
+  
+  .quickview-modal-content {
+    background: white !important;
+    padding: 24px !important;
+    max-width: 500px !important;
+    max-height: 80vh !important;
+    overflow: auto !important;
+    border-radius: 8px !important;
+    position: relative !important;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2) !important;
+    z-index: 1000000 !important;
+    pointer-events: auto !important;
+    margin: 20px !important;
+  }
+  
+  .quickview-close-btn {
+    position: absolute !important;
+    top: 12px !important;
+    right: 12px !important;
+    background: none !important;
+    border: none !important;
+    font-size: 24px !important;
+    cursor: pointer !important;
+    color: #333 !important;
+    width: 30px !important;
+    height: 30px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    z-index: 1000001 !important;
+    pointer-events: auto !important;
+  }
+  
+  .quickview-close-btn:hover {
+    color: #666 !important;
+    cursor: pointer !important;
+  }
+  
+  .quickview-close-btn:active {
+    color: #999 !important;
+  }
+</style> 

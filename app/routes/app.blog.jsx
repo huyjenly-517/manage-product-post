@@ -46,6 +46,7 @@ export async function loader({ request }) {
                       }
                       publishedAt
                       tags
+                      summary
                       seo {
                         title
                         description
@@ -86,6 +87,7 @@ export async function loader({ request }) {
                 date: article.publishedAt ? new Date(article.publishedAt).toISOString().slice(0, 10) : 'Chưa xuất bản',
                 handle: article.handle || article.title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
                 tags: Array.isArray(article.tags) ? article.tags : (article.tags ? [article.tags] : []),
+                excerpt: article.summary || '',
                 blogTitle: blog.title || 'Blog chính'
               });
             });
@@ -94,6 +96,62 @@ export async function loader({ request }) {
 
         // Sắp xếp theo ngày (mới nhất trước)
         articles.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        // Bây giờ lấy thêm data từ metafields để có sections và content
+        try {
+          const metafieldResponse = await admin.graphql(`
+            query getBlogMetafields($first: Int!) {
+              shop {
+                metafields(first: $first, namespace: "blog") {
+                  edges {
+                    node {
+                      id
+                      key
+                      value
+                      createdAt
+                      updatedAt
+                    }
+                  }
+                }
+              }
+            }
+          `, {
+            variables: {
+              first: 100
+            }
+          });
+
+          if (metafieldResponse.ok) {
+            const metafieldResult = await metafieldResponse.json();
+            
+            if (metafieldResult.data?.shop?.metafields?.edges) {
+              // Merge metafield data với articles data
+              articles.forEach(article => {
+                const metafield = metafieldResult.data.shop.metafields.edges.find(
+                  edge => edge.node.key === article.id
+                );
+                
+                if (metafield) {
+                  try {
+                    const blogPostData = JSON.parse(metafield.node.value);
+                    
+                    if (blogPostData.sections) {
+                      article.sections = blogPostData.sections;
+                    }
+                    
+                    if (blogPostData.content) {
+                      article.content = blogPostData.content;
+                    }
+                  } catch (parseError) {
+                    console.error('Error parsing metafield value for article:', article.id, parseError);
+                  }
+                }
+              });
+            }
+          }
+        } catch (metafieldError) {
+          console.log('Could not load metafield data:', metafieldError.message);
+        }
 
         return json({ articles, success: true });
       }
@@ -138,6 +196,7 @@ export async function loader({ request }) {
                       date: article.published_at ? new Date(article.published_at).toISOString().slice(0, 10) : 'Chưa xuất bản',
                       handle: article.handle || article.title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
                       tags: Array.isArray(article.tags) ? article.tags : (article.tags ? [article.tags] : []),
+                      excerpt: article.summary || article.excerpt || '',
                       blogTitle: blog.title || 'Blog chính'
                     });
                   });
@@ -146,6 +205,62 @@ export async function loader({ request }) {
             } catch (articleError) {
               console.error(`Error fetching articles for blog ${blog.id}:`, articleError);
             }
+          }
+
+          // Cũng lấy data từ metafields cho REST API fallback
+          try {
+            const metafieldResponse = await admin.graphql(`
+              query getBlogMetafields($first: Int!) {
+                shop {
+                  metafields(first: $first, namespace: "blog") {
+                    edges {
+                      node {
+                        id
+                        key
+                        value
+                        createdAt
+                        updatedAt
+                      }
+                    }
+                  }
+                }
+              }
+            `, {
+              variables: {
+                first: 100
+              }
+            });
+
+            if (metafieldResponse.ok) {
+              const metafieldResult = await metafieldResponse.json();
+              
+              if (metafieldResult.data?.shop?.metafields?.edges) {
+                // Merge metafield data với articles data
+                articles.forEach(article => {
+                  const metafield = metafieldResult.data.shop.metafields.edges.find(
+                    edge => edge.node.key === article.id
+                  );
+                  
+                  if (metafield) {
+                    try {
+                      const blogPostData = JSON.parse(metafield.node.value);
+                      
+                      if (blogPostData.sections) {
+                        article.sections = blogPostData.sections;
+                      }
+                      
+                      if (blogPostData.content) {
+                        article.content = blogPostData.content;
+                      }
+                    } catch (parseError) {
+                      console.error('Error parsing metafield value for article:', article.id, parseError);
+                    }
+                  }
+                });
+              }
+            }
+          } catch (metafieldError) {
+            console.log('Could not load metafield data:', metafieldError.message);
           }
 
           return json({ articles, success: true });
@@ -195,10 +310,11 @@ export default function BlogListPage() {
 
   useEffect(() => {
     if (success) {
-      // Ensure all posts have properly formatted tags
+      // Ensure all posts have properly formatted tags and excerpt
       const safePosts = articles.map(post => ({
         ...post,
-        tags: Array.isArray(post.tags) ? post.tags : (post.tags ? [post.tags] : [])
+        tags: Array.isArray(post.tags) ? post.tags : (post.tags ? [post.tags] : []),
+        excerpt: post.excerpt || ''
       }));
       
       setPosts(safePosts);
@@ -269,7 +385,8 @@ export default function BlogListPage() {
             content: blogData.content,
             author: blogData.author,
             tags: blogData.tags,
-            excerpt: blogData.excerpt
+            excerpt: blogData.excerpt,
+            sections: sections // Thêm sections data
           })
         });
 
@@ -297,7 +414,8 @@ export default function BlogListPage() {
             content: blogData.content,
             author: blogData.author,
             tags: blogData.tags,
-            excerpt: blogData.excerpt
+            excerpt: blogData.excerpt,
+            sections: sections // Thêm sections data
           })
         });
 
@@ -386,7 +504,16 @@ export default function BlogListPage() {
         <Layout>
           <Layout.Section>
             <BlogBuilder
-              initialContent={editingPost ? [] : []} // Có thể load content cũ nếu edit
+              initialContent={editingPost?.sections || []} // Load sections từ metafield data
+              initialBlogData={editingPost ? {
+                title: editingPost.title,
+                author: editingPost.author,
+                tags: editingPost.tags,
+                excerpt: editingPost.excerpt,
+                content: editingPost.content // Thêm content để parse HTML
+              } : null}
+              blogHandle={editingPost?.blogTitle ? editingPost.blogTitle.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') : 'news'}
+              postHandle={editingPost?.handle || null}
               onSave={handleBuilderSave}
               onCancel={handleBuilderCancel}
             />

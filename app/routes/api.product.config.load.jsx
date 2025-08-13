@@ -6,268 +6,144 @@ export async function loader({ request }) {
     const { admin } = await authenticate.admin(request);
 
     if (!admin) {
-      return json({ error: 'Cannot authenticate admin' }, { status: 401 });
+      return json({ error: 'Không thể xác thực quyền admin' }, { status: 401 });
     }
 
-    console.log('Loading product quickview configuration via GET...');
+    const url = new URL(request.url);
+    const collectionId = url.searchParams.get('collectionId');
+    
+    console.log('Loading product quickview configuration');
+    console.log('Collection ID from params:', collectionId);
 
     let config = null;
-    
-    // Try to load configuration from metafields using REST API
-    try {
-      const metafieldsResponse = await admin.rest.get({
-        path: 'metafields',
-        query: {
-          namespace: 'quickview',
-          key: 'product_config'
+    let message = '';
+    let source = '';
+
+    // Thử lấy config từ collection metafields TRƯỚC (nếu có collectionId)
+    if (collectionId) {
+      try {
+        console.log('Trying to load config from collection metafields FIRST...');
+        console.log('Collection ID for query:', collectionId);
+        console.log('Namespace:', "quickview");
+        console.log('Key:', "collection_config");
+        
+        const collectionMetafieldResponse = await admin.graphql(`
+          query getCollectionMetafield($namespace: String!, $key: String!, $ownerId: ID!) {
+            metafield(namespace: $namespace, key: $key, ownerId: $ownerId) {
+              id
+              key
+              value
+              namespace
+              type
+            }
+          }
+        `, {
+          variables: {
+            namespace: "quickview",
+            key: "collection_config",
+            ownerId: collectionId
+          }
+        });
+
+        console.log('Collection metafield response status:', collectionMetafieldResponse.status);
+        console.log('Collection metafield response ok:', collectionMetafieldResponse.ok);
+
+        if (collectionMetafieldResponse.ok) {
+          const collectionResult = await collectionMetafieldResponse.json();
+          console.log('Collection metafield result:', JSON.stringify(collectionResult, null, 2));
+          
+          if (collectionResult.data?.metafield) {
+            try {
+              config = JSON.parse(collectionResult.data.metafield.value);
+              message = 'Cấu hình đã được load từ collection metafields';
+              source = 'collection';
+              console.log('✅ Config loaded from collection metafields:', config);
+            } catch (parseError) {
+              console.error('Error parsing collection metafield:', parseError);
+            }
+          } else {
+            console.log('No collection metafield found in response');
+            console.log('Collection metafield data:', collectionResult.data);
+          }
+        } else {
+          const errorText = await collectionMetafieldResponse.text();
+          console.error('Collection metafield response not ok:', errorText);
         }
-      });
-      
-      if (metafieldsResponse.data && metafieldsResponse.data.length > 0) {
-        const metafield = metafieldsResponse.data[0];
-        try {
-          config = JSON.parse(metafield.value);
-          console.log('Configuration loaded from REST API metafields:', config);
-        } catch (parseError) {
-          console.error('Error parsing metafield value:', parseError);
-        }
-      } else {
-        console.log('No metafields found with namespace: quickview, key: product_config');
+      } catch (collectionError) {
+        console.log('Collection metafield query failed:', collectionError.message);
+        console.error('Collection error details:', collectionError);
       }
-    } catch (restError) {
-      console.log('REST API failed:', restError);
     }
-    
-    // If no configuration found in metafields, use default
+
+    // Nếu không có config từ collection, sử dụng config mặc định
     if (!config) {
       config = {
         enabled: true,
         buttonText: "Quick View",
         position: 'below',
-        show: {
-          price: true,
-          button: true,
-          description: true,
-          variant: true,
-          image: true,
-          title: true,
-          availability: true,
-        },
-        styling: {
-          theme: 'light',
-          animation: 'fade',
-          overlay: true,
-          closeOnOverlayClick: true,
-          buttonColor: '#007bff',
-          buttonHoverColor: '#0056b3',
-          modalWidth: '500px',
-          modalMaxHeight: '80vh',
-          borderRadius: '8px',
-          shadow: '0 10px 25px rgba(0, 0, 0, 0.2)',
-          closeButtonColor: '#333',
-          closeButtonHoverBg: 'rgba(0, 0, 0, 0.1)',
-          titleColor: '#333',
-          priceColor: '#10b981',
-          descriptionColor: '#6b7280',
-          addToCartButtonColor: '#dc3545',
-          addToCartButtonHoverColor: '#c82333',
-          viewProductButtonColor: '#10b981',
-          viewProductButtonHoverColor: '#059669'
-        },
-        triggers: {
-          hover: false,
-          click: true,
-          button: true,
-        },
-        content: {
-          maxDescriptionLength: 150,
-          showAddToCart: true,
-          showViewProduct: true,
-          showAvailability: true,
-          showPrice: true,
-          showImage: true,
-          showTitle: true,
-          showDescription: true
-        }
+        buttonStyle: 'primary',
+        buttonSize: 'medium',
+        showIcon: true,
+        icon: "👁️",
+        customColor: "",
+        textColor: "",
+        showQuickviewIcon: false,
+        quickviewIcon: "⚡"
       };
-      console.log('Using default configuration');
+      message = 'Không có cấu hình được lưu, sử dụng cấu hình mặc định';
+      source = 'default';
+      console.log('ℹ️ Using default config');
     }
+
+    console.log('Final config source:', source);
+    console.log('Final config:', config);
 
     return json({ 
       success: true, 
+      message: message,
       config: config,
-      message: 'Product quickview configuration loaded successfully via GET'
+      source: source
     });
 
   } catch (error) {
-    console.error('Error loading quickview config:', error);
+    console.error('Lỗi khi load cấu hình quickview:', error);
     
-    // Return default config on error
-    const defaultConfig = {
+    // Trả về config mặc định nếu có lỗi
+    const fallbackConfig = {
       enabled: true,
       buttonText: "Quick View",
       position: 'below',
-      show: {
-        price: true,
-        button: true,
-        description: true,
-        variant: true,
-        image: true,
-        title: true,
-        availability: true,
-      },
-      styling: {
-        theme: 'light',
-        animation: 'fade',
-        overlay: true,
-        closeOnOverlayClick: true,
-        buttonColor: '#007bff',
-        buttonHoverColor: '#0056b3',
-        modalWidth: '500px',
-        modalMaxHeight: '80vh',
-        borderRadius: '8px',
-        shadow: '0 10px 25px rgba(0, 0, 0, 0.2)',
-        closeButtonColor: '#333',
-        closeButtonHoverBg: 'rgba(0, 0, 0, 0.1)',
-        titleColor: '#333',
-        priceColor: '#10b981',
-        descriptionColor: '#6b7280',
-        addToCartButtonColor: '#dc3545',
-        addToCartButtonHoverColor: '#c82333',
-        viewProductButtonColor: '#10b981',
-        viewProductButtonHoverColor: '#059669'
-      },
-      triggers: {
-        hover: false,
-        click: true,
-        button: true,
-      },
-      content: {
-        maxDescriptionLength: 150,
-        showAddToCart: true,
-        showViewProduct: true,
-        showAvailability: true,
-        showPrice: true,
-        showImage: true,
-        showTitle: true,
-        showDescription: true
-      }
+      buttonStyle: 'primary',
+      buttonSize: 'medium',
+      showIcon: true,
+      icon: "👁️",
+      customColor: "",
+      textColor: "",
+      showQuickviewIcon: false,
+      quickviewIcon: "⚡"
     };
-    
+
     return json({ 
-      success: true, 
-      config: defaultConfig,
-      message: 'Using default configuration due to error'
-    });
+      success: false, 
+      error: 'Có lỗi xảy ra khi load cấu hình: ' + error.message,
+      config: fallbackConfig,
+      source: 'fallback'
+    }, { status: 500 });
   }
 }
 
+// Handle OPTIONS request for CORS preflight
 export async function action({ request }) {
-  try {
-    const { admin } = await authenticate.admin(request);
-
-    if (!admin) {
-      return json({ error: 'Không thể xác thực quyền admin' }, { status: 401 });
-    }
-
-    console.log('Loading product quickview configuration...');
-
-    // Lấy shop ID
-    const shopResponse = await admin.graphql(`
-      query getShop {
-        shop {
-          id
-        }
-      }
-    `);
-
-    if (!shopResponse.ok) {
-      throw new Error(`Failed to get shop: ${shopResponse.status}`);
-    }
-
-    const shopResult = await shopResponse.json();
-    const shopId = shopResult.data.shop.id;
-
-    // Lấy cấu hình từ metafields
-    const metafieldResponse = await admin.graphql(`
-      query getMetafields($ownerId: ID!) {
-        metafields(first: 10, ownerId: $ownerId, namespace: "quickview") {
-          edges {
-            node {
-              id
-              key
-              value
-              type
-            }
-          }
-        }
-      }
-    `, {
-      variables: { ownerId: shopId }
-    });
-
-    if (!metafieldResponse.ok) {
-      throw new Error(`Failed to get metafields: ${metafieldResponse.status}`);
-    }
-
-    const metafieldResult = await metafieldResponse.json();
+  if (request.method === 'OPTIONS') {
+    const response = new Response(null, { status: 200 });
     
-    // Tìm cấu hình quickview
-    let config = null;
-    if (metafieldResult.data?.metafields?.edges) {
-      const configMetafield = metafieldResult.data.metafields.edges.find(
-        edge => edge.node.key === 'product_config'
-      );
-      
-      if (configMetafield) {
-        try {
-          config = JSON.parse(configMetafield.node.value);
-          console.log('Loaded configuration:', config);
-        } catch (parseError) {
-          console.error('Error parsing configuration:', parseError);
-        }
-      }
-    }
-
-    // Nếu không có cấu hình, trả về cấu hình mặc định
-    if (!config) {
-      config = {
-        enabled: true,
-        position: 'below',
-        show: {
-          price: true,
-          button: true,
-          description: true,
-          variant: true,
-          image: true,
-          title: true,
-          availability: true,
-        },
-        styling: {
-          theme: 'light',
-          animation: 'fade',
-          overlay: true,
-          closeOnOverlayClick: true,
-        },
-        triggers: {
-          hover: false,
-          click: true,
-          button: true,
-        }
-      };
-      console.log('Using default configuration');
-    }
-
-    return json({ 
-      success: true, 
-      config: config,
-      message: config ? 'Cấu hình đã được tải thành công' : 'Sử dụng cấu hình mặc định'
-    });
-
-  } catch (error) {
-    console.error('Lỗi khi tải cấu hình quickview:', error);
-    return json({ 
-      error: 'Có lỗi xảy ra khi tải cấu hình: ' + error.message 
-    }, { status: 500 });
+    // Add CORS headers for preflight
+    response.headers.set('Access-Control-Allow-Origin', '*');
+    response.headers.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    response.headers.set('Access-Control-Allow-Headers', 'Content-Type');
+    
+    return response;
   }
+  
+  return json({ error: 'Method not allowed' }, { status: 405 });
 } 

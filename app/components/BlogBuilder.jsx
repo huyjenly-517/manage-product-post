@@ -67,7 +67,65 @@ const SortableColumn = ({ column, children, ...props }) => {
   );
 };
 
-const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
+const BlogBuilder = ({ initialContent = [], initialBlogData = null, blogHandle = 'news', postHandle = null, onSave, onCancel }) => {
+  console.log('=== BLOGBUILDER PROPS DEBUG ===');
+  console.log('initialContent:', initialContent);
+  console.log('initialBlogData:', initialBlogData);
+  console.log('blogHandle:', blogHandle);
+  console.log('postHandle:', postHandle);
+  
+  // Function to parse HTML and recreate sections
+  const parseHtmlToSections = (htmlContent) => {
+    console.log('🔍 Parsing HTML to recreate sections...');
+    console.log('HTML content:', htmlContent);
+    
+    try {
+      // Create a temporary DOM element to parse HTML
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = htmlContent;
+      
+      const sections = [];
+      
+      // Find all divs with class containing "section"
+      const sectionElements = tempDiv.querySelectorAll('div[class*="section"]');
+      console.log('Found section elements:', sectionElements.length);
+      
+      sectionElements.forEach((sectionEl, index) => {
+        const section = {
+          id: `section-${Date.now()}-${index + 1}`,
+          type: sectionEl.className.includes('two-column') ? 'two-column' : 
+                sectionEl.className.includes('three-column') ? 'three-column' : 'single-column',
+          columns: []
+        };
+        
+        // Find columns in section
+        const columnElements = sectionEl.querySelectorAll('.column');
+        console.log(`Section ${index + 1} has ${columnElements.length} columns`);
+        
+        columnElements.forEach((colEl, colIndex) => {
+          const isImage = colEl.className.includes('image');
+          const column = {
+            id: `col-${Date.now()}-${index + 1}-${colIndex + 1}`,
+            type: isImage ? 'image' : 'text',
+            content: isImage ? '' : (colEl.textContent || ''),
+            src: isImage ? (colEl.querySelector('img')?.src || '') : '',
+            alt: isImage ? (colEl.querySelector('img')?.alt || 'Caption') : '',
+            style: isImage ? { width: '100%', height: 'auto' } : { fontSize: '16px', color: '#333' }
+          };
+          section.columns.push(column);
+        });
+        
+        sections.push(section);
+      });
+      
+      console.log('✅ Parsed sections:', sections);
+      return sections;
+    } catch (error) {
+      console.error('❌ Error parsing HTML:', error);
+      return [];
+    }
+  };
+  
   const [sections, setSections] = useState(initialContent.length > 0 ? initialContent : [
     {
       id: 'section-1',
@@ -101,10 +159,21 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [blogData, setBlogData] = useState({
-    title: '',
-    author: 'Admin',
-    tags: '',
-    excerpt: ''
+    title: initialBlogData?.title || '',
+    author: initialBlogData?.author || 'Admin',
+    tags: (() => {
+      if (initialBlogData?.tags) {
+        if (Array.isArray(initialBlogData.tags)) {
+          // Nếu tags là array, chuyển thành string với dấu phẩy
+          return initialBlogData.tags.join(', ');
+        } else if (typeof initialBlogData.tags === 'string') {
+          // Nếu tags là string, giữ nguyên
+          return initialBlogData.tags;
+        }
+      }
+      return '';
+    })(),
+    excerpt: initialBlogData?.excerpt || ''
   });
 
   // Shopify App Bridge
@@ -114,6 +183,86 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
   useEffect(() => {
     setIsClient(true);
   }, []);
+
+  // Debug: Log blogData changes
+  useEffect(() => {
+    console.log('blogData changed:', blogData);
+  }, [blogData]);
+
+  // Update blogData when initialBlogData changes (for editing)
+  useEffect(() => {
+    if (initialBlogData) {
+      console.log('Initial blog data received:', initialBlogData);
+      setBlogData({
+        title: initialBlogData.title || '',
+        author: initialBlogData.author || 'Admin',
+        tags: (() => {
+          if (initialBlogData.tags) {
+            if (Array.isArray(initialBlogData.tags)) {
+              // Nếu tags là array, chuyển thành string với dấu phẩy
+              return initialBlogData.tags.join(', ');
+            } else if (typeof initialBlogData.tags === 'string') {
+              // Nếu tags là string, giữ nguyên
+              return initialBlogData.tags;
+            }
+          }
+          return '';
+        })(),
+        excerpt: initialBlogData.excerpt || ''
+      });
+    }
+  }, [initialBlogData]);
+
+  // Update sections when initialContent changes (for editing)
+  useEffect(() => {
+    console.log('=== INITIAL CONTENT DEBUG ===');
+    console.log('initialContent received:', initialContent);
+    console.log('initialContent type:', typeof initialContent);
+    console.log('initialContent length:', initialContent?.length);
+    console.log('initialContent is array:', Array.isArray(initialContent));
+    console.log('initialContent is empty array:', initialContent?.length === 0);
+    console.log('initialContent === [] (JSON):', JSON.stringify(initialContent) === '[]');
+    
+    if (initialContent && initialContent.length > 0) {
+      console.log('✅ Initial sections content received:', initialContent);
+      console.log('Sections data structure:', JSON.stringify(initialContent, null, 2));
+      
+      // Debug: Check each section and column
+      initialContent.forEach((section, sectionIndex) => {
+        console.log(`Section ${sectionIndex}:`, section);
+        if (section.columns) {
+          section.columns.forEach((column, columnIndex) => {
+            console.log(`  Column ${columnIndex}:`, column);
+            if (column.type === 'image') {
+              console.log(`    Image src:`, column.src);
+              console.log(`    Image alt:`, column.alt);
+            }
+          });
+        }
+      });
+      
+      console.log('Setting sections state with:', initialContent);
+      setSections(initialContent);
+    } else {
+      console.log('❌ No initialContent or empty array');
+      console.log('Current sections state:', sections);
+      console.log('This means editingPost.sections is undefined or empty');
+      
+      // Try to parse HTML content if available
+      if (initialBlogData?.content) {
+        console.log('🔍 Trying to parse HTML content to recreate sections...');
+        const parsedSections = parseHtmlToSections(initialBlogData.content);
+        if (parsedSections.length > 0) {
+          console.log('✅ Successfully parsed sections from HTML:', parsedSections);
+          setSections(parsedSections);
+        } else {
+          console.log('❌ Failed to parse sections from HTML');
+        }
+      } else {
+        console.log('❌ No HTML content available to parse');
+      }
+    }
+  }, [initialContent, initialBlogData]);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -131,39 +280,39 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
         {
           id: `col-${Date.now()}`,
           type: 'text',
-          content: 'Nội dung mới...',
+          content: 'New Text...',
           style: { fontSize: '16px', color: '#333' }
         }
       ] : type === 'two-column' ? [
         {
           id: `col-${Date.now()}-1`,
           type: 'text',
-          content: 'Cột 1...',
+          content: 'Column 1...',
           style: { fontSize: '16px', color: '#333' }
         },
         {
           id: `col-${Date.now()}-2`,
           type: 'text',
-          content: 'Cột 2...',
+          content: 'Column 2...',
           style: { fontSize: '16px', color: '#333' }
         }
       ] : [
         {
           id: `col-${Date.now()}-1`,
           type: 'text',
-          content: 'Cột 1...',
+          content: 'Column 1...',
           style: { fontSize: '16px', color: '#333' }
         },
         {
           id: `col-${Date.now()}-2`,
           type: 'text',
-          content: 'Cột 2...',
+          content: 'Column 2...',
           style: { fontSize: '16px', color: '#333' }
         },
         {
           id: `col-${Date.now()}-3`,
           type: 'text',
-          content: 'Cột 3...',
+          content: 'Column 3...',
           style: { fontSize: '16px', color: '#333' }
         }
       ]
@@ -185,7 +334,7 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
           columns: [...section.columns, {
             id: `col-${Date.now()}`,
             type: 'text',
-            content: 'Cột mới...',
+            content: 'New Column...',
             style: { fontSize: '16px', color: '#333' }
           }]
         };
@@ -220,7 +369,7 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
                 type: newType,
                 content: newType === 'image' ? '' : col.content,
                 src: newType === 'image' ? '' : undefined,
-                alt: newType === 'image' ? 'Mô tả ảnh' : undefined
+                alt: newType === 'image' ? 'Caption' : undefined
               };
             }
             return col;
@@ -270,10 +419,10 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
           ...section,
           columns: section.columns.map(col => {
             if (col.id === columnId) {
-              return { 
-                ...col, 
+              return {
+                ...col,
                 src: media.src || media.url || media.preview?.image?.url,
-                alt: media.alt || media.altText || 'Mô tả ảnh'
+                alt: media.alt || media.altText || 'Caption'
               };
             }
             return col;
@@ -299,10 +448,10 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
             ...section,
             columns: section.columns.map(col => {
               if (col.id === mediaPickerContext.columnId) {
-                return { 
-                  ...col, 
+                return {
+                  ...col,
                   src: selectedMedia.url,
-                  alt: selectedMedia.altText || selectedMedia.alt || 'Mô tả ảnh'
+                  alt: selectedMedia.altText || selectedMedia.alt || 'Caption'
                 };
               }
               return col;
@@ -311,7 +460,7 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
         }
         return section;
       }));
-      
+
       // Show success message
       setShowSuccessMessage(true);
       setTimeout(() => setShowSuccessMessage(false), 3000);
@@ -341,11 +490,8 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
 
       if (response.ok) {
         const data = await response.json();
-        console.log('Media API response:', data);
-        
+
         if (data.success) {
-          console.log('Media list received:', data.media);
-          console.log('Media source:', data.source);
           setMediaList(data.media);
         } else {
           console.error('Lỗi khi lấy media:', data.error);
@@ -362,20 +508,6 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
     }
   };
 
-  // Mở file input thông thường (fallback)
-  const openFileInput = (sectionId, columnId) => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.onchange = (e) => {
-      const file = e.target.files[0];
-      if (file) {
-        updateImage(sectionId, columnId, file);
-      }
-    };
-    input.click();
-  };
-
   // Kéo thả để sắp xếp lại sections
   const handleSectionDragEnd = (event) => {
     const { active, over } = event;
@@ -384,7 +516,17 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
       setSections((items) => {
         const oldIndex = items.findIndex(item => item.id === active.id);
         const newIndex = items.findIndex(item => item.id === over.id);
-        return arrayMove(items, oldIndex, newIndex);
+
+        // Log thay đổi để debug
+        console.log(`Moving section from index ${oldIndex} to ${newIndex}`);
+        console.log('Section being moved:', items[oldIndex]);
+
+        const newSections = arrayMove(items, oldIndex, newIndex);
+
+        // Log thứ tự mới
+        console.log('New section order:', newSections.map((s, i) => `${i + 1}: ${s.type} (${s.id})`));
+
+        return newSections;
       });
     }
   };
@@ -398,9 +540,19 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
         if (section.id === sectionId) {
           const oldIndex = section.columns.findIndex(col => col.id === active.id);
           const newIndex = section.columns.findIndex(col => col.id === over.id);
+
+          // Log thay đổi để debug
+          console.log(`Moving column from index ${oldIndex} to ${newIndex} in section ${sectionId}`);
+          console.log('Column being moved:', section.columns[oldIndex]);
+
+          const newColumns = arrayMove(section.columns, oldIndex, newIndex);
+
+          // Log thứ tự mới
+          console.log('New column order:', newColumns.map((col, i) => `${i + 1}: ${col.type} (${col.id})`));
+
           return {
             ...section,
-            columns: arrayMove(section.columns, oldIndex, newIndex)
+            columns: newColumns
           };
         }
         return section;
@@ -413,42 +565,131 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
     setShowSaveModal(true);
   };
 
+  const handleView = () => {
+    // Tạo URL frontend cho bài viết (giống như button View ở list)
+    const storeDomain = window.location.hostname.includes('myshopify.com')
+      ? window.location.hostname
+      : 'muamuahe.myshopify.com';
+
+    // Sử dụng postHandle từ props nếu có, hoặc tạo từ title
+    const finalPostHandle = postHandle || (blogData.title ?
+      blogData.title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') :
+      'untitled');
+
+    const frontendUrl = `https://${storeDomain}/blogs/${blogHandle}/${finalPostHandle}`;
+
+    // Mở URL trong tab mới
+    window.open(frontendUrl, '_blank');
+  };
+
   const handleSaveSubmit = () => {
+    // Debug: Log current blogData state
+    console.log('Current blogData before save:', blogData);
+
     if (!blogData.title.trim()) {
       alert('Vui lòng nhập tiêu đề bài viết!');
       return;
     }
-    
+
+    // Debug: Log validation
+    console.log('Title validation passed:', blogData.title);
+    console.log('Author:', blogData.author);
+    console.log('Tags:', blogData.tags);
+    console.log('Excerpt:', blogData.excerpt);
+
+    // Validation: Kiểm tra sections data
+    console.log('Validating sections before save...');
+    const validSections = sections.filter((section, index) => {
+      if (!section.id || !section.type) {
+        console.warn(`Section ${index} missing required fields:`, section);
+        return false;
+      }
+
+      if (!section.columns || !Array.isArray(section.columns)) {
+        console.warn(`Section ${index} missing or invalid columns:`, section);
+        return false;
+      }
+
+      const validColumns = section.columns.filter((column, colIndex) => {
+        if (!column.id || !column.type) {
+          console.warn(`Column ${colIndex} in section ${index} missing required fields:`, column);
+          return false;
+        }
+
+        if (column.type === 'image' && !column.src) {
+          console.warn(`Image column ${colIndex} in section ${index} missing src:`, column);
+          // Không return false vì có thể có fallback
+        }
+
+        return true;
+      });
+
+      section.columns = validColumns;
+      return validColumns.length > 0;
+    });
+
+    console.log(`Validated sections: ${validSections.length}/${sections.length} sections are valid`);
+
+    if (validSections.length === 0) {
+      alert('Không có sections hợp lệ để lưu!');
+      return;
+    }
+
+    // Sử dụng validated sections
+    const sectionsToSave = validSections;
+
     // Chuyển đổi sections thành HTML content với CSS styling
-    const content = sections.map(section => {
-      const columnsHtml = section.columns.map(column => {
+    const content = sectionsToSave.map((section, sectionIndex) => {
+      // Đảm bảo mỗi section có ID duy nhất để CSS hoạt động ổn định
+      const sectionId = `section-${sectionIndex + 1}`;
+
+      const columnsHtml = section.columns.map((column, columnIndex) => {
         if (column.type === 'text') {
-          return `<div class="column ${column.type}">${column.content}</div>`;
+          return `<div class="column ${column.type}" data-column-id="${column.id}">${column.content}</div>`;
         } else if (column.type === 'image') {
-          return `<div class="column ${column.type}"><img src="${column.src}" alt="${column.alt || ''}" style="${Object.entries(column.style).map(([key, value]) => `${key}: ${value}`).join('; ')}" /></div>`;
+          // Validation và fallback cho images
+          const imageSrc = column.src || '';
+          const imageAlt = column.alt || 'Image';
+
+          // Kiểm tra xem image URL có hợp lệ không
+          const isValidImageUrl = imageSrc && (imageSrc.startsWith('http') || imageSrc.startsWith('data:') || imageSrc.startsWith('/'));
+
+          if (isValidImageUrl) {
+            return `<div class="column ${column.type}" data-column-id="${column.id}">
+              <img src="${imageSrc}" alt="${imageAlt}" style="${Object.entries(column.style || {}).map(([key, value]) => `${key}: ${value}`).join('; ')}" />
+            </div>`;
+          } else {
+            // Fallback cho image không hợp lệ
+            return `<div class="column ${column.type} error" data-column-id="${column.id}">
+              <div class="image-placeholder" style="padding: 20px; text-align: center; background: #f8f9fa; border: 2px dashed #dee2e6; border-radius: 8px; color: #6c757d;">
+                <p>⚠️ Image not available</p>
+                <small>${imageAlt}</small>
+              </div>
+            </div>`;
+          }
         }
         return '';
       }).join('');
 
-      // Thêm CSS styling cho từng loại section
+      // Thêm CSS styling cho từng loại section với ID cụ thể
       let sectionCss = '';
       if (section.type === 'two-column') {
         sectionCss = `
           <style>
-            .section.two-column {
+            #${sectionId}.section.two-column {
               display: flex;
               flex-wrap: nowrap;
               gap: 20px;
               margin-bottom: 30px;
               width: 100%;
             }
-            .section.two-column .column {
+            #${sectionId}.section.two-column .column {
               flex: 1 1 0;
               min-width: 0;
               box-sizing: border-box;
               width: calc(50% - 10px);
             }
-            .section.two-column .column.text {
+            #${sectionId}.section.two-column .column.text {
               padding: 20px;
               background: #f8f9fa;
               border-radius: 8px;
@@ -456,24 +697,31 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
               word-wrap: break-word;
               overflow-wrap: break-word;
             }
-            .section.two-column .column.image {
+            #${sectionId}.section.two-column .column.image {
               display: flex;
               align-items: center;
               justify-content: center;
             }
-            .section.two-column .column.image img {
+            #${sectionId}.section.two-column .column.image img {
               width: 100%;
               height: auto;
               border-radius: 8px;
               box-shadow: 0 2px 8px rgba(0,0,0,0.1);
               object-fit: cover;
             }
+            #${sectionId}.section.two-column .column.image.error .image-placeholder {
+              min-height: 120px;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+            }
             @media (max-width: 768px) {
-              .section.two-column {
+              #${sectionId}.section.two-column {
                 flex-direction: column;
                 gap: 15px;
               }
-              .section.two-column .column {
+              #${sectionId}.section.two-column .column {
                 flex: none;
                 width: 100%;
               }
@@ -483,20 +731,20 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
       } else if (section.type === 'three-column') {
         sectionCss = `
           <style>
-            .section.three-column {
+            #${sectionId}.section.three-column {
               display: flex;
               flex-wrap: nowrap;
               gap: 15px;
               margin-bottom: 30px;
               width: 100%;
             }
-            .section.three-column .column {
+            #${sectionId}.section.three-column .column {
               flex: 1 1 0;
               min-width: 0;
               box-sizing: border-box;
               width: calc(33.333% - 10px);
             }
-            .section.three-column .column.text {
+            #${sectionId}.section.three-column .column.text {
               padding: 15px;
               background: #f8f9fa;
               border-radius: 8px;
@@ -504,24 +752,31 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
               word-wrap: break-word;
               overflow-wrap: break-word;
             }
-            .section.three-column .column.image {
+            #${sectionId}.section.three-column .column.image {
               display: flex;
               align-items: center;
               justify-content: center;
             }
-            .section.three-column .column.image img {
+            #${sectionId}.section.three-column .column.image img {
               width: 100%;
               height: auto;
               border-radius: 8px;
               box-shadow: 0 2px 8px rgba(0,0,0,0.1);
               object-fit: cover;
             }
+            #${sectionId}.section.three-column .column.image.error .image-placeholder {
+              min-height: 100px;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+            }
             @media (max-width: 768px) {
-              .section.three-column {
+              #${sectionId}.section.three-column {
                 flex-direction: column;
                 gap: 15px;
               }
-              .section.three-column .column {
+              #${sectionId}.section.three-column .column {
                 flex: none;
                 width: 100%;
               }
@@ -532,15 +787,15 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
         // Single column
         sectionCss = `
           <style>
-            .section.single-column {
+            #${sectionId}.section.single-column {
               margin-bottom: 30px;
               width: 100%;
             }
-            .section.single-column .column {
+            #${sectionId}.section.single-column .column {
               width: 100%;
               box-sizing: border-box;
             }
-            .section.single-column .column.text {
+            #${sectionId}.section.single-column .column.text {
               padding: 20px;
               background: #f8f9fa;
               border-radius: 8px;
@@ -548,23 +803,29 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
               word-wrap: break-word;
               overflow-wrap: break-word;
             }
-            .section.single-column .column.image {
+            #${sectionId}.section.single-column .column.image {
               display: flex;
               align-items: center;
               justify-content: center;
             }
-            .section.single-column .column.image img {
+            #${sectionId}.section.single-column .column.image img {
               width: 100%;
               height: auto;
               border-radius: 8px;
               box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-              object-fit: cover;
+            }
+            #${sectionId}.section.single-column .column.image.error .image-placeholder {
+              min-height: 150px;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
             }
           </style>
         `;
       }
 
-      return `${sectionCss}<div class="section ${section.type}">${columnsHtml}</div>`;
+      return `${sectionCss}<div id="${sectionId}" class="section ${section.type}" data-section-id="${section.id}">${columnsHtml}</div>`;
     }).join('');
 
     // Thêm CSS global cho toàn bộ bài viết
@@ -579,58 +840,64 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
           line-height: 1.6;
           color: #333;
         }
-        
+
         /* Ensure all columns have consistent styling */
         .column {
           box-sizing: border-box;
           margin: 0;
         }
-        
+
         .column.text {
           font-size: 16px;
           line-height: 1.6;
         }
-        
+
         .column.text p {
           margin: 0 0 16px 0;
         }
-        
+
         .column.text p:last-child {
           margin-bottom: 0;
-        }
-        
-        .column.image img {
-          display: block;
-          max-width: 100%;
-        }
-        
-        /* Responsive design */
-        @media (max-width: 768px) {
-          .blog-post {
-            padding: 15px;
-          }
-          
-          .section {
-            margin-bottom: 20px;
-          }
-          
-          .section .column {
-            margin-bottom: 15px;
-          }
         }
       </style>
     `;
 
-    // Gọi onSave với dữ liệu đầy đủ
-    onSave({
-      sections,
+    // Tạo data để gửi đi
+    const dataToSend = {
+      sections: sectionsToSave,
       blogData: {
-        ...blogData,
-        tags: blogData.tags.split(',').map(tag => tag.trim()).filter(tag => tag),
+        title: blogData.title.trim(),
+        author: blogData.author.trim() || 'Admin',
+        tags: (() => {
+          console.log('Processing tags:', blogData.tags, 'Type:', typeof blogData.tags, 'IsArray:', Array.isArray(blogData.tags));
+
+          if (Array.isArray(blogData.tags)) {
+            // Nếu tags đã là array, chỉ cần filter và trim
+            const processedTags = blogData.tags.map(tag => String(tag).trim()).filter(tag => tag);
+            console.log('Tags processed from array:', processedTags);
+            return processedTags;
+          } else if (typeof blogData.tags === 'string' && blogData.tags.trim()) {
+            // Nếu tags là string, split và xử lý
+            const processedTags = blogData.tags.split(',').map(tag => tag.trim()).filter(tag => tag);
+            console.log('Tags processed from string:', processedTags);
+            return processedTags;
+          } else {
+            // Nếu tags không có hoặc rỗng, trả về array rỗng
+            console.log('No tags found, returning empty array');
+            return [];
+          }
+        })(),
+        excerpt: blogData.excerpt.trim(),
         content: `${globalCss}<div class="blog-post">${content}</div>`
       }
-    });
-    
+    };
+
+    // Debug: Log final data being sent
+    console.log('Data being sent to onSave:', dataToSend);
+
+    // Gọi onSave với dữ liệu đầy đủ
+    onSave(dataToSend);
+
     setShowSaveModal(false);
   };
 
@@ -674,6 +941,9 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
                 </Button>
                 <Button onClick={handleSave} variant="primary" tone="success">
                   💾 Save
+                </Button>
+                <Button onClick={handleView} variant="secondary">
+                  👁️ View
                 </Button>
                 <Button onClick={onCancel} variant="secondary">
                   ❌ Cancel
@@ -775,7 +1045,7 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
                                                   console.log('Value:', e.target.value);
                                                   console.log('Column ID:', column.id);
                                                   console.log('Section ID:', section.id);
-                                                  
+
                                                   // Update the column content directly
                                                   const newSections = sections.map(s => {
                                                     if (s.id === section.id) {
@@ -791,13 +1061,13 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
                                                     }
                                                     return s;
                                                   });
-                                                  
+
                                                   console.log('New sections:', newSections);
                                                   setSections(newSections);
                                                 }}
                                                 placeholder="Nhập nội dung..."
-                                                style={{ 
-                                                  width: '100%', 
+                                                style={{
+                                                  width: '100%',
                                                   minHeight: '80px',
                                                   padding: '8px',
                                                   border: '2px solid #007bff',
@@ -813,15 +1083,15 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
                                               {column.src ? (
                                                 <BlockStack gap="300" align="center">
                                                   <Box position="relative">
-                                                    <img 
-                                                      src={column.src} 
-                                                      alt={column.alt} 
-                                                      style={{ 
-                                                        maxWidth: '100%', 
-                                                        maxHeight: '200px', 
-                                                        borderRadius: '4px', 
-                                                        border: '1px solid #dee2e6' 
-                                                      }} 
+                                                    <img
+                                                      src={column.src}
+                                                      alt={column.alt}
+                                                      style={{
+                                                        maxWidth: '100%',
+                                                        maxHeight: '200px',
+                                                        borderRadius: '4px',
+                                                        border: '1px solid #dee2e6'
+                                                      }}
                                                     />
                                                     {/* Remove button */}
                                                     <Button
@@ -837,10 +1107,10 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
                                                               ...s,
                                                               columns: s.columns.map(col => {
                                                                 if (col.id === column.id) {
-                                                                  return { 
-                                                                    ...col, 
+                                                                  return {
+                                                                    ...col,
                                                                     src: '',
-                                                                    alt: 'Mô tả ảnh'
+                                                                    alt: 'Caption'
                                                                   };
                                                                 }
                                                                 return col;
@@ -895,7 +1165,7 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
                                                     }}
                                                     onFocus={(e) => e.stopPropagation()}
                                                     onClick={(e) => e.stopPropagation()}
-                                                    placeholder="Mô tả ảnh"
+                                                    placeholder="Caption"
                                                     style={{ width: '100%', padding: '6px', border: '1px solid #ced4da', borderRadius: '4px', fontSize: '12px' }}
                                                   />
                                                 </BlockStack>
@@ -995,10 +1265,10 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
                                     ...s,
                                     columns: s.columns.map(col => {
                                       if (col.id === mediaPickerContext.columnId) {
-                                        return { 
-                                          ...col, 
+                                        return {
+                                          ...col,
                                           src: uploadResult.file.preview?.image?.url || uploadResult.file.url,
-                                          alt: uploadResult.file.alt || file.name || 'Mô tả ảnh'
+                                          alt: uploadResult.file.alt || file.name || 'Caption'
                                         };
                                       }
                                       return col;
@@ -1038,12 +1308,12 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
                   </Button>
                 </BlockStack>
               </Card>
-              
+
               <Card>
                 <BlockStack gap="300" padding="400">
                   <Text variant="headingMd" as="h3">🖼️ Chọn từ Media Library</Text>
                   <Text as="p" variant="bodyMd">Chọn ảnh từ kho media của store</Text>
-                  
+
                   {isLoadingMedia ? (
                     <Box padding="400" textAlign="center">
                       <Text variant="bodyMd" tone="subdued">Đang tải danh sách media...</Text>
@@ -1085,7 +1355,7 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
                           </InlineStack>
                         </InlineStack>
                       </Box>
-                      
+
                       <InlineStack align="space-between">
                         <Text variant="bodySm" tone="subdued">
                           Tìm thấy {mediaList.length} ảnh
@@ -1094,7 +1364,7 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
                           {mediaList.filter(media => media.type === 'IMAGE').length} ảnh
                         </Text>
                       </InlineStack>
-                      
+
                       {/* Grid layout giống Shopify Media Library */}
                       <div style={{
                         display: 'grid',
@@ -1118,7 +1388,7 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
                               borderRadius="200"
                               background="bg-surface"
                               onClick={() => handleMediaSelect(media)}
-                              style={{ 
+                              style={{
                                 cursor: 'pointer',
                                 transition: 'all 0.2s ease',
                                 position: 'relative'
@@ -1146,7 +1416,7 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
                                 background: 'rgba(255, 255, 255, 0.9)',
                                 zIndex: 1
                               }} />
-                              
+
                               {/* Image thumbnail */}
                               <div style={{
                                 width: '100%',
@@ -1159,17 +1429,17 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
                                 alignItems: 'center',
                                 justifyContent: 'center'
                               }}>
-                                <img 
-                                  src={media.url} 
-                                  alt={media.altText || media.alt || 'Media'} 
-                                  style={{ 
-                                    width: '100%', 
-                                    height: '100%', 
+                                <img
+                                  src={media.url}
+                                  alt={media.altText || media.alt || 'Media'}
+                                  style={{
+                                    width: '100%',
+                                    height: '100%',
                                     objectFit: 'cover'
-                                  }} 
+                                  }}
                                 />
                               </div>
-                              
+
                               {/* File info */}
                               <BlockStack gap="100">
                                 <Text variant="bodySm" as="span" truncate>
@@ -1187,7 +1457,7 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
                             </Box>
                           ))}
                       </div>
-                      
+
                       {/* Pagination info */}
                       <Box padding="200" textAlign="center">
                         <Text variant="bodySm" tone="subdued">
@@ -1232,7 +1502,7 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
               <BlockStack gap="400">
                 <div>
                   <label htmlFor="title" style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#555' }}>
-                    Tiêu đề:
+                    Title:
                   </label>
                   <input
                     id="title"
@@ -1243,10 +1513,10 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
                     style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '14px' }}
                   />
                 </div>
-                
+
                 <div>
                   <label htmlFor="author" style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#555' }}>
-                    Tác giả:
+                    Author:
                   </label>
                   <input
                     id="author"
@@ -1257,10 +1527,10 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
                     style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '14px' }}
                   />
                 </div>
-                
+
                 <div>
                   <label htmlFor="tags" style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#555' }}>
-                    Tags (nhập cách nhau bằng dấu phẩy):
+                    Tags (separated by commas):
                   </label>
                   <input
                     id="tags"
@@ -1271,10 +1541,10 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
                     style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '14px' }}
                   />
                 </div>
-                
+
                 <div>
                   <label htmlFor="excerpt" style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#555' }}>
-                    Tóm tắt:
+                    Excerpt:
                   </label>
                   <textarea
                     id="excerpt"
@@ -1293,4 +1563,4 @@ const BlogBuilder = ({ initialContent = [], onSave, onCancel }) => {
   );
 };
 
-export default BlogBuilder; 
+export default BlogBuilder;

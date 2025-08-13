@@ -1,896 +1,711 @@
 <!-- Quickview App Extension Snippet -->
-<!-- This snippet automatically loads the quickview functionality -->
-<!-- Include this in your theme templates where you want quickview to work -->
-
-<!-- Global functions for quickview - Must be defined first -->
-<script>
-  // Close quickview modal - Global scope
-  function closeQuickviewModal() {
-    const modal = document.querySelector('.quickview-modal');
-    if (modal) {
-      modal.remove();
-      document.body.style.overflow = '';
-    }
-  }
-  
-  // Add to cart function - Global scope
-  function addToCart(productHandle) {
-    console.log('Adding to cart for product:', productHandle);
-    
-    // Get the first available variant
-    const variantId = getFirstAvailableVariant(productHandle);
-    
-    if (!variantId) {
-      alert('Product not available - cannot find variant ID');
-      return;
-    }
-    
-    if (variantId === 'NEED_FETCH') {
-      // Redirect to product page where add to cart will work
-      alert('Please go to the product page to add to cart. Redirecting...');
-      setTimeout(() => {
-        window.location.href = `/products/${productHandle}`;
-      }, 1000);
-      return;
-    }
-    
-    console.log('Using variant ID:', variantId);
-    
-    // Add to cart using Shopify's AJAX API
-    fetch('/cart/add.js', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        items: [{
-          id: variantId,
-          quantity: 1
-        }]
-      })
-    })
-    .then(response => response.json())
-    .then(data => {
-      if (data.status === 422) {
-        alert('Error: ' + data.description);
-      } else {
-        // Success - update cart count and show success message
-        updateCartCount();
-        showSuccessMessage('Product added to cart!');
-        
-        // Close modal after short delay
-        setTimeout(() => {
-          closeQuickviewModal();
-        }, 1500);
-      }
-    })
-    .catch(error => {
-      console.error('Error adding to cart:', error);
-      alert('Error adding product to cart');
-    });
-  }
-  
-  // Get first available variant ID
-  function getFirstAvailableVariant(productHandle) {
-    console.log('Looking for variant ID for product:', productHandle);
-    
-    // Method 1: Try to get variant ID from data attributes
-    const variantElement = document.querySelector(`[data-product-handle="${productHandle}"] [data-variant-id]`);
-    if (variantElement) {
-      const variantId = variantElement.getAttribute('data-variant-id');
-      console.log('Found variant ID from data-product-handle:', variantId);
-      return variantId;
-    }
-    
-    // Method 2: Try to find variant ID in the product card
-    const productCard = document.querySelector(`[href*="/products/${productHandle}"]`)?.closest('.card-wrapper, .product-item, .grid-product, .card');
-    if (productCard) {
-      // Look for variant ID in various attributes
-      const variantId = productCard.querySelector('[data-variant-id]')?.getAttribute('data-variant-id') ||
-                       productCard.getAttribute('data-variant-id') ||
-                       productCard.querySelector('[data-product-id]')?.getAttribute('data-product-id');
-      
-      if (variantId) {
-        console.log('Found variant ID from product card:', variantId);
-        return variantId;
-      }
-    }
-    
-    // Method 3: Try to find variant ID from form elements
-    const addToCartForm = document.querySelector(`form[action*="/cart/add"] input[name="id"]`);
-    if (addToCartForm) {
-      const variantId = addToCartForm.value;
-      console.log('Found variant ID from form:', variantId);
-      return variantId;
-    }
-    
-    // Method 4: Try to find variant ID from any product-related element
-    const allProductElements = document.querySelectorAll('[data-product-id], [data-variant-id], [data-product-handle]');
-    for (const element of allProductElements) {
-      if (element.getAttribute('data-product-handle') === productHandle) {
-        const variantId = element.getAttribute('data-variant-id') || element.getAttribute('data-product-id');
-        if (variantId) {
-          console.log('Found variant ID from product element:', variantId);
-          return variantId;
-        }
-      }
-    }
-    
-    // Method 5: Try to extract from URL or other sources
-    const productLink = document.querySelector(`a[href*="/products/${productHandle}"]`);
-    if (productLink) {
-      const parentElement = productLink.closest('[data-product-id], [data-variant-id]');
-      if (parentElement) {
-        const variantId = parentElement.getAttribute('data-variant-id') || parentElement.getAttribute('data-product-id');
-        if (variantId) {
-          console.log('Found variant ID from product link parent:', variantId);
-          return variantId;
-        }
-      }
-    }
-    
-    // Method 6: Try to find any variant ID on the page (last resort)
-    const anyVariantId = document.querySelector('[data-variant-id]')?.getAttribute('data-variant-id');
-    if (anyVariantId) {
-      console.log('Found any variant ID on page (fallback):', anyVariantId);
-      return anyVariantId;
-    }
-    
-    // Method 7: Try to get variant ID from product page (if available)
-    try {
-      const productPageUrl = `/products/${productHandle}.js`;
-      console.log('Trying to fetch variant ID from:', productPageUrl);
-      
-      // This is a synchronous approach - in production you might want to make this async
-      // For now, we'll return a placeholder and let the user know
-      console.log('No variant ID found on page, need to fetch from product page');
-      return 'NEED_FETCH';
-    } catch (error) {
-      console.log('Error trying to fetch variant ID:', error);
-    }
-    
-    console.log('No variant ID found for product:', productHandle);
-    return null;
-  }
-  
-  // Update cart count in header
-  function updateCartCount() {
-    // Try to find cart count element
-    const cartCount = document.querySelector('.cart-count, .cart-count-bubble, [data-cart-count]');
-    if (cartCount) {
-      // Fetch current cart and update count
-      fetch('/cart.js')
-        .then(response => response.json())
-        .then(cart => {
-          const count = cart.item_count || 0;
-          cartCount.textContent = count;
-          cartCount.style.display = count > 0 ? 'block' : 'none';
-        })
-        .catch(error => {
-          // Silently fail if cart update fails
-        });
-    }
-  }
-  
-  // Show success message
-  function showSuccessMessage(message) {
-    // Remove existing message
-    const existingMessage = document.querySelector('.quickview-success-message');
-    if (existingMessage) {
-      existingMessage.remove();
-    }
-    
-    // Create success message
-    const successMessage = document.createElement('div');
-    successMessage.className = 'quickview-success-message';
-    successMessage.style.cssText = `
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      background: #10b981;
-      color: white;
-      padding: 16px 24px;
-      border-radius: 8px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-      z-index: 1000000;
-      font-family: inherit;
-      font-size: 16px;
-      font-weight: 500;
-      animation: slideInRight 0.3s ease-out;
-    `;
-    successMessage.textContent = message;
-    
-    // Add animation styles
-    if (!document.getElementById('quickview-animations')) {
-      const style = document.createElement('style');
-      style.id = 'quickview-animations';
-      style.textContent = `
-        @keyframes slideInRight {
-          from { transform: translateX(100%); opacity: 0; }
-          to { transform: translateX(0); opacity: 1; }
-        }
-        @keyframes slideOutRight {
-          from { transform: translateX(0); opacity: 1; }
-          to { transform: translateX(100%); opacity: 0; }
-        }
-      `;
-      document.head.appendChild(style);
-    }
-    
-    document.body.appendChild(successMessage);
-    
-    // Auto remove after 3 seconds
-    setTimeout(() => {
-      successMessage.style.animation = 'slideOutRight 0.3s ease-in';
-      setTimeout(() => {
-        if (successMessage.parentNode) {
-          successMessage.remove();
-        }
-      }, 300);
-    }, 3000);
-  }
-  
-  // Reload quickview configuration from server
-  function reloadQuickviewConfig() {
-    // Get the current shop domain
-    const shopDomain = window.Shopify?.shop || window.location.hostname;
-    const appUrl = `https://${shopDomain}/api/product/config/load`;
-    
-    fetch(appUrl, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-cache'
-      },
-    })
-    .then(response => response.json())
-    .then(result => {
-      if (result.success && result.config) {
-        // Update global config
-        window.quickviewConfig = result.config;
-        
-        // Re-initialize quickview with new config
-        if (window.initQuickview) {
-          window.initQuickview();
-        }
-        
-        showSuccessMessage('Configuration reloaded successfully!');
-      }
-    })
-    .catch(error => {
-      console.error('Error reloading config:', error);
-      showSuccessMessage('Error reloading configuration');
-    });
-  }
-</script>
+<!-- Simple and safe version that won't break site loading -->
 
 <script>
-  // Quickview App Extension - Embedded Code
+  // Simple quickview functionality
   (function() {
     'use strict';
-    
-    // Check if quickview is already loaded
-    if (window.QuickviewLoaded) return;
-    window.QuickviewLoaded = true;
-    
-    // Quickview Configuration with more dynamic options
+
+    // Default configuration - only used if API fails completely
     let quickviewConfig = {
-      enabled: true,
+      enabled: false, // Default to disabled for safety
       buttonText: "Quick View",
-      show: {
-        price: true,
-        button: true,
-        description: true,
-        variant: true,
-        image: true,
-        title: true,
-        availability: true,
-      },
-      styling: {
-        theme: 'light',
-        animation: 'fade',
-        overlay: true,
-        closeOnOverlayClick: true,
-        buttonColor: '#007bff',
-        buttonHoverColor: '#0056b3',
-        modalWidth: '500px',
-        modalMaxHeight: '80vh',
-        borderRadius: '8px',
-        shadow: '0 10px 25px rgba(0, 0, 0, 0.2)',
-        closeButtonColor: '#333',
-        closeButtonHoverBg: 'rgba(0, 0, 0, 0.1)',
-        titleColor: '#333',
-        priceColor: '#10b981',
-        descriptionColor: '#6b7280',
-        addToCartButtonColor: '#dc3545',
-        addToCartButtonHoverColor: '#c82333',
-        viewProductButtonColor: '#10b981',
-        viewProductButtonHoverColor: '#059669'
-      },
-      triggers: {
-        button: true,
-      },
-      content: {
-        maxDescriptionLength: 150,
-        showAddToCart: true,
-        showViewProduct: true,
-        showAvailability: true,
-        showPrice: true,
-        showImage: true,
-        showTitle: true,
-        showDescription: true
-      }
+      position: 'below'
     };
 
-    // Load configuration from app
-    async function loadQuickviewConfig() {
-      try {
-        // Get the current shop domain
-        const shopDomain = window.Shopify?.shop || window.location.hostname;
-        const appUrl = `https://${shopDomain}/api/product/config/load`;
-        
-        console.log('Loading quickview configuration from:', appUrl);
-        
-        const response = await fetch(appUrl, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
-          },
-        });
+    // Track if quickview is enabled
+    let quickviewEnabled = false;
 
-        if (response.ok) {
-          const result = await response.json();
-          if (result.success && result.config) {
-            console.log('Configuration loaded successfully:', result.config);
-            quickviewConfig = result.config;
-            // Also set global config for external access
-            window.quickviewConfig = quickviewConfig;
-            
-            // Show success message
-            showSuccessMessage('Configuration updated!');
-            
-            // Re-initialize quickview with new config
-            setTimeout(() => {
-              initQuickview();
-            }, 100);
-          } else {
-            console.log('No configuration found, using default');
-          }
-        } else {
-          console.log('Failed to load configuration, using default');
-        }
+    // Track if quickview has been initialized
+    let quickviewInitialized = false;
+
+    // MutationObserver to watch for DOM changes
+    let observer = null;
+
+    // Load configuration from app using API call
+    function loadConfig() {
+      try {
+        console.log('Loading config from app API');
+
+        // Try to get the current app domain from the page
+        const hardcodedDomain = 'https://start-tool-threat-freeware.trycloudflare.com/';
+        const currentDomain = window.location.origin;
+
+        // Try current domain first, then fallback
+        const quickviewUrl = `${hardcodedDomain}/api/quickview/config`;
+        console.log('Trying current domain:', quickviewUrl);
+        callQuickviewAPI(quickviewUrl);
+
       } catch (error) {
-        console.log('Error loading configuration, using default:', error);
-        // Use default config on error
+        console.log('Quickview config error:', error);
+        console.log('Using fallback config - enabling quickview');
       }
+    }
+
+    // Call the quickview API
+    function callQuickviewAPI(appUrl, callback) {
+      console.log('Calling API:', appUrl);
+
+      fetch(appUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+          // Removed Cache-Control header to avoid CORS issues
+        }
+      })
+        .then(response => {
+          console.log('API response status:', response.status);
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+          return response.json();
+        })
+        .then(result => {
+          console.log('API response:', result);
+
+          if (result.success && result.config) {
+            const oldEnabled = quickviewConfig.enabled;
+
+            // Apply config from API
+            quickviewConfig = { ...quickviewConfig, ...result.config };
+
+            // If enabled state changed, force reinitialize
+
+            if (oldEnabled !== quickviewConfig.enabled) {
+              console.log('Enabled state changed, removing all buttons');
+              removeAllButtons();
+            }
+
+            initQuickview();
+
+            // Call callback with success
+            if (callback) callback(true);
+          } else {
+
+            // Fallback to enabled config if API fails
+            quickviewConfig.enabled = true;
+            quickviewConfig.buttonText = "Quick View";
+            quickviewConfig.position = 'below';
+
+            // Call callback with failure
+            if (callback) callback(false);
+          }
+        })
+        .catch(error => {
+
+          // Fallback to enabled config if API fails
+          quickviewConfig.enabled = true;
+          quickviewConfig.buttonText = "Quick View";
+          quickviewConfig.position = 'below';
+          console.log('Using fallback config due to API error - enabling quickview');
+          initQuickview();
+
+          // Call callback with failure
+          if (callback) callback(false);
+        });
     }
 
     // Create quickview button
-    function createQuickviewButton(productElement, productData) {
-      if (!quickviewConfig.enabled || !quickviewConfig.triggers.button) {
+    function createButton(element) {
+      if (!quickviewConfig.enabled) return;
+
+      // Check if button exists - more thorough check
+      const existingButton = element.querySelector('.quickview-button');
+      if (existingButton) {
+        console.log('Button already exists in element, skipping');
         return;
       }
 
-      // Check if button already exists
-      if (productElement.querySelector('.quickview-button')) {
+      // Check if this element or any of its parents already has quickview initialized
+      const hasButtonInParent = element.closest('[data-quickview-initialized]');
+      if (hasButtonInParent) {
+        console.log('Parent already has quickview initialized, skipping');
         return;
       }
 
-      const button = document.createElement('button');
-      button.className = 'quickview-button';
-      button.textContent = quickviewConfig.buttonText;
-      button.style.cssText = `
-        background: ${quickviewConfig.styling.buttonColor};
-        color: white;
-        border: none;
-        padding: 8px 16px;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 14px;
-        font-weight: 500;
-        margin-top: 8px;
-        width: 100%;
-        transition: background-color 0.2s ease;
-        font-family: inherit;
-      `;
-
-      button.addEventListener('mouseenter', () => {
-        button.style.background = quickviewConfig.styling.buttonHoverColor;
-      });
-
-      button.addEventListener('mouseleave', () => {
-        button.style.background = quickviewConfig.styling.buttonColor;
-      });
-
-      button.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        openQuickviewModal(productData);
-      });
-
-      return button;
-    }
-
-    // Create and show quickview modal
-    function openQuickviewModal(productData) {
-      if (!productData) return;
-
-      // Close existing modal if any
-      closeQuickviewModal();
-
-      const currentTheme = quickviewConfig.styling?.theme || 'light';
-      const animation = quickviewConfig.styling?.animation || 'fade';
-      const showOverlay = quickviewConfig.styling?.overlay !== false;
-
-      // Create modal container
-      const modal = document.createElement('div');
-      modal.className = 'quickview-modal';
-      modal.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        z-index: 999999;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        ${showOverlay ? 'background-color: rgba(0, 0, 0, 0.5);' : ''}
-      `;
-
-      // Create modal content
-      const content = document.createElement('div');
-      content.style.cssText = `
-        background: ${currentTheme === 'dark' ? '#1f2937' : 'white'};
-        color: ${currentTheme === 'dark' ? 'white' : '#333'};
-        border-radius: ${quickviewConfig.styling.borderRadius};
-        padding: 24px;
-        max-width: ${quickviewConfig.styling.modalWidth};
-        max-height: ${quickviewConfig.styling.modalMaxHeight};
-        overflow: auto;
-        box-shadow: ${quickviewConfig.styling.shadow};
-        position: relative;
-        animation: ${animation} 0.3s ease-in-out;
-        font-family: inherit;
-      `;
-
-      // Create close button
-      const closeButton = document.createElement('button');
-      closeButton.innerHTML = '×';
-      closeButton.style.cssText = `
-        position: absolute;
-        top: 12px;
-        right: 12px;
-        background: none;
-        border: none;
-        font-size: 24px;
-        cursor: pointer;
-        color: ${quickviewConfig.styling.closeButtonColor};
-        width: 30px;
-        height: 30px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 50%;
-        transition: background-color 0.2s ease;
-      `;
-
-      closeButton.addEventListener('mouseenter', () => {
-        closeButton.style.background = quickviewConfig.styling.closeButtonHoverBg;
-      });
-
-      closeButton.addEventListener('mouseleave', () => {
-        closeButton.style.background = 'transparent';
-      });
-
-      closeButton.addEventListener('click', () => {
-        closeQuickviewModal();
-      });
-
-      // Create product content
-      let productContent = '';
-
-      if (quickviewConfig.content.showTitle && productData.title) {
-        productContent += `<h3 style="margin: 0 0 16px 0; font-size: 20px; font-weight: 600; color: ${quickviewConfig.styling.titleColor}; font-family: inherit;">${productData.title}</h3>`;
+      // Check if this element already has the attribute
+      if (element.hasAttribute('data-quickview-initialized')) {
+        console.log('Element already marked as initialized, skipping');
+        return;
       }
 
-      if (quickviewConfig.content.showImage && productData.featured_image) {
-        productContent += `
-          <div style="margin-bottom: 16px; text-align: center;">
-            <img src="${productData.featured_image}" alt="${productData.title}" style="max-width: 100%; max-height: 200px; border-radius: 4px; object-fit: cover;">
-          </div>
-        `;
-      }
+      // Mark this element as initialized
+      element.setAttribute('data-quickview-initialized', 'true');
 
-      if (quickviewConfig.content.showPrice && productData.price) {
-        productContent += `<div style="margin-bottom: 16px; font-size: 18px; font-weight: 600; color: ${quickviewConfig.styling.priceColor}; font-family: inherit;">${productData.price}</div>`;
-      }
+      let button; // Declare button variable
 
-      if (quickviewConfig.content.showDescription && productData.description) {
-        const description = productData.description.length > quickviewConfig.content.maxDescriptionLength 
-          ? `${productData.description.substring(0, quickviewConfig.content.maxDescriptionLength)}...` 
-          : productData.description;
-        productContent += `<div style="margin-bottom: 16px; font-size: 14px; line-height: 1.5; color: ${quickviewConfig.styling.descriptionColor}; font-family: inherit;">${description}</div>`;
-      }
+      // Try to find existing quick-add button to clone its style
+      const existingQuickAddButton = element.querySelector('.quick-add__submit, .button--secondary, button[type="submit"]');
 
-      if (quickviewConfig.content.showAvailability) {
-        const availability = productData.available ? '✅ In Stock' : '❌ Out of Stock';
-        const color = productData.available ? '#10b981' : '#ef4444';
-        productContent += `<div style="margin-bottom: 16px; font-size: 14px; color: ${color}; font-family: inherit;">${availability}</div>`;
-      }
+      if (existingQuickAddButton) {
+        console.log('Found existing button to clone:', existingQuickAddButton);
 
-      if (quickviewConfig.content.showAddToCart) {
-        productContent += `
-          <div style="text-align: center; margin-bottom: 16px;">
-            <button id="quickview-add-to-cart-${Date.now()}" class="quickview-add-to-cart" data-product-handle="${productData.handle}" style="
-              background: ${quickviewConfig.styling.addToCartButtonColor};
-              color: white;
-              border: none;
-              padding: 12px 24px;
-              border-radius: 6px;
-              cursor: pointer;
-              font-size: 16px;
-              font-weight: 500;
-              width: 100%;
-              font-family: inherit;
-              transition: background-color 0.2s ease;
-              margin-bottom: 8px;
-            " onmouseover="this.style.background='${quickviewConfig.styling.addToCartButtonHoverColor}'" onmouseout="this.style.background='${quickviewConfig.styling.addToCartButtonColor}'">Add to Cart</button>
-          </div>
-          <div style="text-align: center;">
-            <button onclick="window.location.href='/products/${productData.handle}'" style="
-              background: ${quickviewConfig.styling.viewProductButtonColor};
-              color: white;
-              border: none;
-              padding: 12px 24px;
-              border-radius: 6px;
-              cursor: pointer;
-              font-size: 16px;
-              font-weight: 500;
-              width: 100%;
-              font-family: inherit;
-              transition: background-color 0.2s ease;
-            " onmouseover="this.style.background='${quickviewConfig.styling.viewProductButtonHoverColor}'" onmouseout="this.style.background='${quickviewConfig.styling.viewProductButtonColor}'">View Full Product</button>
-          </div>
-        `;
-      }
+        // Clone the existing button structure
+        button = existingQuickAddButton.cloneNode(true);
+        button.className = 'quickview-button ' + (existingQuickAddButton.className || '');
+        button.type = 'button'; // Change from submit to button
+        button.textContent = quickviewConfig.buttonText || 'Quick View';
 
-      content.innerHTML = productContent;
-      content.appendChild(closeButton);
+        // Remove form-related attributes
+        button.removeAttribute('name');
+        button.removeAttribute('form');
+        button.removeAttribute('aria-haspopup');
+        button.removeAttribute('aria-labelledby');
+        button.removeAttribute('data-product-url');
 
-      // Add event listeners for add to cart buttons
-      const addToCartButton = content.querySelector('.quickview-add-to-cart');
-      if (addToCartButton) {
-        addToCartButton.addEventListener('click', function(e) {
+        // Remove loading spinner and other elements
+        const spinner = button.querySelector('.loading-overlay__spinner');
+        if (spinner) spinner.remove();
+
+        // Add quickview-specific attributes
+        button.setAttribute('data-quickview', 'true');
+
+        // Add click handler
+        const clickHandler = (e) => {
           e.preventDefault();
           e.stopPropagation();
-          const productHandle = this.getAttribute('data-product-handle');
-          if (productHandle) {
-            addToCart(productHandle);
-          }
+          e.stopImmediatePropagation();
+
+          console.log('Quickview button clicked!', e);
+          openModal(element);
+
+          return false;
+        };
+
+        button.addEventListener('click', clickHandler, true);
+        button.addEventListener('mousedown', (e) => e.preventDefault());
+        button.addEventListener('touchstart', clickHandler, true);
+
+        console.log('Created quickview button by cloning:', button);
+
+      } else {
+        console.log('No existing button found, creating new one');
+
+        // Fallback to creating new button
+        button = document.createElement('button');
+        button.className = 'quickview-button';
+        button.type = 'button';
+        button.textContent = quickviewConfig.buttonText || 'Quick View';
+
+        // Set inline styles to ensure they work
+        button.style.cssText = `
+          background: #007bff !important;
+          color: white !important;
+          border: none !important;
+          padding: 8px 16px !important;
+          border-radius: 4px !important;
+          cursor: pointer !important;
+          font-size: 14px !important;
+          font-weight: 500 !important;
+          margin-top: 8px !important;
+          width: 100% !important;
+          transition: background-color 0.2s ease !important;
+          font-family: inherit !important;
+          display: block !important;
+          text-align: center !important;
+          text-decoration: none !important;
+          pointer-events: auto !important;
+          position: relative !important;
+          z-index: 1000 !important;
+          user-select: none !important;
+        `;
+
+        // Hover effects
+        button.addEventListener('mouseenter', () => {
+          button.style.background = '#0056b3 !important';
+          button.style.cursor = 'pointer !important';
         });
+        button.addEventListener('mouseleave', () => {
+          button.style.background = '#007bff !important';
+          button.style.cursor = 'pointer !important';
+        });
+
+        // Click handler
+        const clickHandler = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+
+          console.log('Quickview button clicked!', e);
+          openModal(element);
+
+          return false;
+        };
+
+        button.addEventListener('click', clickHandler, true);
+        button.addEventListener('mousedown', (e) => e.preventDefault());
+        button.addEventListener('touchstart', clickHandler, true);
+
+        console.log('Created fallback quickview button:', button);
       }
 
-      // Add click handler to close on overlay click
-      if (quickviewConfig.styling?.closeOnOverlayClick) {
-        modal.addEventListener('click', (e) => {
-          if (e.target === modal) {
-            closeQuickviewModal();
-          }
-        });
+      // Ensure button is defined before positioning
+      if (!button) {
+        console.error('Button creation failed, cannot position');
+        return;
       }
 
-      // Add escape key handler
-      document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') {
-          closeQuickviewModal();
-        }
-      });
+      // Position button
+      const position = quickviewConfig.position || 'below';
+      switch (position) {
+        case 'above':
+          element.insertBefore(button, element.firstChild);
+          break;
+        default:
+          element.appendChild(button);
+          break;
+      }
 
-      modal.appendChild(content);
-      document.body.appendChild(modal);
-
-      // Prevent body scroll
-      document.body.style.overflow = 'hidden';
+      console.log('Quickview button positioned for element:', element);
     }
 
-    // Extract product data from DOM element
-    function extractProductData(element) {
+    // Open quickview modal
+    function openModal(element) {
       try {
-        // Try to get data from data attributes
-        const productId = element.getAttribute('data-product-id') || 
-                         element.querySelector('[data-product-id]')?.getAttribute('data-product-id');
-        
-        const title = element.querySelector('.product-title, .grid-product__title, .product__title, h3, h4, .product-name')?.textContent?.trim();
-        const price = element.querySelector('.product-price, .grid-product__price, .price, .product__price')?.textContent?.trim();
-        const image = element.querySelector('img')?.src;
-        const handle = element.querySelector('a[href*="/products/"]')?.href?.split('/products/')[1]?.split('?')[0];
-        
-        // Try to get description from meta or data
-        const description = element.getAttribute('data-product-description') || 
-                           element.querySelector('.product-description, .product__description')?.textContent?.trim() || '';
-        
-        // Check availability (you might need to adjust this based on your theme)
-        const available = !element.querySelector('.sold-out, .unavailable, [data-available="false"], .product__sold-out');
-        
-        if (productId || title) {
-          return {
-            id: productId,
-            title: title,
-            price: price,
-            featured_image: image,
-            handle: handle,
-            description: description,
-            available: available
-          };
+
+        // Store original overflow value
+        const originalOverflow = document.body.style.overflow;
+        console.log('Original overflow:', originalOverflow);
+
+        // Close existing modal
+        const existing = document.querySelector('.quickview-modal');
+        if (existing) {
+          console.log('Removing existing modal');
+          existing.remove();
         }
+
+        // Get product data
+        const title = element.querySelector('h3, h4, .product-title')?.textContent?.trim() || 'Product';
+        const price = element.querySelector('.price, .product-price')?.textContent?.trim() || '';
+        const image = element.querySelector('img')?.src || '';
+        const link = element.querySelector('a[href*="/products/"]')?.href || '';
+
+        console.log('Product data found:', { title, price, image, link });
+
+        // Create modal container
+        const modal = document.createElement('div');
+        modal.className = 'quickview-modal';
+        modal.id = 'quickview-modal-' + Date.now();
+        modal.style.cssText = `
+          position: fixed !important;
+          top: 0 !important;
+          left: 0 !important;
+          right: 0 !important;
+          bottom: 0 !important;
+          z-index: 999999 !important;
+          background: rgba(0, 0, 0, 0.5) !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          font-family: inherit !important;
+        `;
+
+        // Create modal content
+        const content = document.createElement('div');
+        content.className = 'quickview-modal-content';
+        content.style.cssText = `
+          background: white !important;
+          padding: 24px !important;
+          max-width: 500px !important;
+          max-height: 80vh !important;
+          overflow: auto !important;
+          border-radius: 8px !important;
+          position: relative !important;
+          box-shadow: 0 10px 25px rgba(0,0,0,0.2) !important;
+          z-index: 1000000 !important;
+        `;
+
+        // Create close button
+        const closeBtn = document.createElement('button');
+        closeBtn.innerHTML = '×';
+        closeBtn.className = 'quickview-close-btn';
+        closeBtn.style.cssText = `
+          position: absolute !important;
+          top: 12px !important;
+          right: 12px !important;
+          background: none !important;
+          border: none !important;
+          font-size: 24px !important;
+          cursor: pointer !important;
+          color: #333 !important;
+          width: 30px !important;
+          height: 30px !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          z-index: 1000001 !important;
+        `;
+
+        // Function to close modal and restore scrolling
+        const closeModal = () => {
+          console.log('Closing modal and restoring overflow to:', originalOverflow);
+          modal.remove();
+          document.body.style.overflow = originalOverflow || '';
+          document.removeEventListener('keydown', escapeHandler);
+        };
+
+        // Close button event
+        closeBtn.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          console.log('Close button clicked');
+          closeModal();
+        };
+
+        // Build content HTML
+        let html = '';
+        if (image) html += `<img src="${image}" style="max-width: 100%; margin-bottom: 16px; border-radius: 4px; display: block;">`;
+        if (title) html += `<h3 style="margin: 0 0 16px 0; color: #333; font-size: 20px;">${title}</h3>`;
+        if (price) html += `<div style="margin-bottom: 16px; font-size: 18px; font-weight: 600; color: #10b981;">${price}</div>`;
+        if (link) html += `<a href="${link}" style="display: block; text-align: center; background: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 500; margin-top: 16px;">View Product Details</a>`;
+
+        content.innerHTML = html;
+        content.appendChild(closeBtn);
+        modal.appendChild(content);
+
+        // Close on overlay click
+        modal.onclick = (e) => {
+          if (e.target === modal) {
+            console.log('Overlay clicked, closing modal');
+            closeModal();
+          }
+        };
+
+        // Escape key handler
+        const escapeHandler = (e) => {
+          if (e.key === 'Escape') {
+            console.log('Escape key pressed, closing modal');
+            closeModal();
+          }
+        };
+        document.addEventListener('keydown', escapeHandler);
+
+        // Add modal to page
+        console.log('Adding modal to page...');
+        document.body.appendChild(modal);
+        document.body.style.overflow = 'hidden';
+
+        // Cleanup when modal is removed
+        modal.addEventListener('remove', () => {
+          console.log('Modal removed event triggered');
+          document.body.style.overflow = originalOverflow || '';
+          document.removeEventListener('keydown', escapeHandler);
+        });
+
       } catch (error) {
-        console.log('Error extracting product data:', error);
+        console.error('Error opening modal:', error);
+        console.error('Error stack:', error.stack);
       }
-      
-      return null;
     }
 
-    // Initialize quickview on page
+    // Force remove all quickview buttons
+    function removeAllButtons() {
+      try {
+        const buttons = document.querySelectorAll('.quickview-button');
+        buttons.forEach(btn => btn.remove());
+
+        const markers = document.querySelectorAll('[data-quickview-initialized]');
+        markers.forEach(el => el.removeAttribute('data-quickview-initialized'));
+
+        console.log(`Removed ${buttons.length} quickview buttons and ${markers.length} markers`);
+      } catch (error) {
+        console.error('Error removing buttons:', error);
+      }
+    }
+
+    // Initialize quickview
     function initQuickview() {
-      // Find all product elements on the page
-      const productElements = document.querySelectorAll('.product-item, .grid-product, .product-card, .product, [data-product-id], .product__item, .grid__item, .card-wrapper');
-      
-      productElements.forEach((element, index) => {
-        // Extract product data from the element
-        const productData = extractProductData(element);
-        
-        if (productData) {
-          // Find the best location to insert the quickview button
-          let buttonContainer = null;
-          
-          // Try to find card__content first
-          buttonContainer = element.querySelector('.card__content');
-          
-          // If not found, try other common selectors
-          if (!buttonContainer) {
-            buttonContainer = element.querySelector('.card__information, .product-actions, .product-footer, .product__buttons, .product__actions, .card-information');
-          }
-          
-          // If still not found, use the element itself
-          if (!buttonContainer) {
-            buttonContainer = element;
-          }
-          
-          // Create and insert quickview button
-          const quickviewButton = createQuickviewButton(element, productData);
-          if (quickviewButton) {
-            // Insert button at the end of the container
-            buttonContainer.appendChild(quickviewButton);
-            
-            // Force button to be visible
-            quickviewButton.style.cssText += `
-              display: block !important;
-              visibility: visible !important;
-              opacity: 1 !important;
-              position: relative !important;
-              margin: 8px 0 !important;
-              clear: both !important;
-              z-index: 100 !important;
-            `;
-          }
-        }
-      });
-    }
-    
-    // Make initQuickview globally accessible
-    window.initQuickview = initQuickview;
+      try {
+        console.log('Initializing quickview, enabled:', quickviewConfig.enabled);
 
-    // Add CSS animations
-    function addQuickviewStyles() {
-      if (document.getElementById('quickview-styles')) return; // Already added
-      
-      const style = document.createElement('style');
-      style.id = 'quickview-styles';
-      style.textContent = `
-        @keyframes fade {
-          from { opacity: 0; transform: scale(0.9); }
-          to { opacity: 1; transform: scale(1); }
-        }
-        
-        @keyframes slide {
-          from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        
-        @keyframes zoom {
-          from { opacity: 0; transform: scale(0.8); }
-          to { opacity: 1; transform: scale(1); }
-        }
-        
-        .quickview-button:hover {
-          background-color: ${quickviewConfig.styling.buttonHoverColor} !important;
-        }
-        
-        .quickview-modal {
-          font-family: inherit;
-        }
-      `;
-      document.head.appendChild(style);
-    }
+        // Set global flag
+        quickviewEnabled = quickviewConfig.enabled;
 
-    // Initialize when DOM is ready
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', function() {
-        addQuickviewStyles();
-        loadQuickviewConfig().then(() => {
-          initQuickview();
+        // If already initialized and enabled, don't reinitialize
+        if (quickviewInitialized && quickviewEnabled) {
+          console.log('Quickview already initialized and enabled, skipping');
+          return;
+        }
+
+        // Remove existing buttons and cleanup
+        document.querySelectorAll('.quickview-button').forEach(btn => {
+          btn.remove();
         });
-      });
-    } else {
-      addQuickviewStyles();
-      loadQuickviewConfig().then(() => {
-        initQuickview();
-      });
-    }
 
-    // Reload configuration when page becomes visible (user returns from admin app)
-    document.addEventListener('visibilitychange', function() {
-      if (!document.hidden) {
-        console.log('Page became visible, reloading configuration...');
-        loadQuickviewConfig();
-      }
-    });
+        // Remove initialization markers
+        document.querySelectorAll('[data-quickview-initialized]').forEach(el => {
+          el.removeAttribute('data-quickview-initialized');
+        });
 
-    // Also reload configuration when window gains focus
-    window.addEventListener('focus', function() {
-      console.log('Window gained focus, reloading configuration...');
-      loadQuickviewConfig();
-    });
+        // If disabled, don't create any buttons
+        if (!quickviewConfig.enabled) {
+          console.log('Quickview is disabled, not creating buttons');
+          if (observer) {
+            observer.disconnect();
+            observer = null;
+          }
+          quickviewInitialized = false;
+          return;
+        }
 
-    // Re-initialize when page content changes (for AJAX navigation)
-    if (typeof window !== 'undefined') {
-      window.addEventListener('popstate', () => {
-        setTimeout(() => {
-          initQuickview();
-        }, 100);
-      });
-      
-      // For themes that use AJAX navigation
-      const observer = new MutationObserver(function(mutations) {
-        mutations.forEach(function(mutation) {
-          if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
-            // Check if new products were added
-            const newProducts = Array.from(mutation.addedNodes).some(node => 
-              node.nodeType === 1 && (
-                node.classList?.contains('product-item') || 
-                node.classList?.contains('grid-product') ||
-                node.classList?.contains('product-card') ||
-                node.classList?.contains('product') ||
-                node.classList?.contains('product__item') ||
-                node.classList?.contains('grid__item')
-              )
+
+        // Find product elements - be more specific to avoid duplicates
+        const selectors = [
+          '.card__content:not([data-quickview-initialized])',
+          '.card__information:not([data-quickview-initialized])',
+          '.product-item:not([data-quickview-initialized])',
+          '.grid-product:not([data-quickview-initialized])',
+          '.product-card:not([data-quickview-initialized])',
+          '.grid__item:not([data-quickview-initialized])',
+          '.product-card-wrapper:not([data-quickview-initialized])'
+        ];
+
+        let totalButtons = 0;
+        selectors.forEach(selector => {
+          try {
+            const elements = document.querySelectorAll(selector);
+            console.log(`Found ${elements.length} elements for selector: ${selector}`);
+
+            elements.forEach(element => {
+              // Double check - element should not have button and not be initialized
+              if (element &&
+                !element.querySelector('.quickview-button') &&
+                !element.hasAttribute('data-quickview-initialized') &&
+                !element.closest('[data-quickview-initialized]')) {
+
+
+                createButton(element);
+                totalButtons++;
+              } else {
+                console.log('Skipping element (already has button or initialized):', element);
+              }
+            });
+          } catch (error) {
+            console.error('Error processing selector:', selector, error);
+          }
+        });
+
+        // If no buttons were created, try a broader search
+        if (totalButtons === 0) {
+          console.log('No buttons created with specific selectors, trying broader search...');
+
+          // Look for any elements that might be product containers
+          const allElements = document.querySelectorAll('*');
+          const potentialElements = Array.from(allElements).filter(el => {
+            return el.classList && (
+              el.classList.contains('card') ||
+              el.classList.contains('product') ||
+              el.classList.contains('item') ||
+              el.classList.contains('grid') ||
+              el.querySelector('img') ||
+              el.querySelector('h3, h4, .product-title') ||
+              el.querySelector('.price, .product-price')
             );
-            
-            if (newProducts) {
-              setTimeout(initQuickview, 100);
+          });
+
+          console.log('Found potential product elements:', potentialElements.length);
+
+          potentialElements.forEach((element, index) => {
+            if (index < 10) { // Limit to first 10 to avoid spam
+              console.log(`Potential element ${index + 1}:`, element.className, element.tagName);
             }
-          }
-        });
-      });
-      
-      observer.observe(document.body, {
-        childList: true,
-        subtree: true
-      });
+          });
+        }
+
+        // Mark as initialized
+        quickviewInitialized = true;
+
+        console.log(`Quickview initialized with ${totalButtons} buttons`);
+      } catch (error) {
+        console.error('Error initializing quickview:', error);
+      }
     }
 
-    // Make functions globally available for debugging
-    window.QuickviewDebug = {
+    // Enable quickview immediately for testing
+    function enableQuickviewImmediately() {
+      console.log('Enabling quickview immediately for testing');
+      quickviewConfig.enabled = true;
+      quickviewConfig.buttonText = "Quick View";
+      quickviewConfig.position = 'below';
+      quickviewEnabled = true;
+
+      // Force initialization
+      removeAllButtons();
+
+      console.log('Quickview enabled and initialized');
+    }
+
+    // Initialize quickview with theme config (called from app block)
+    function initWithThemeConfig(themeConfig) {
+      console.log('Initializing quickview with theme config:', themeConfig);
+
+      // Apply theme config
+      quickviewConfig = { ...quickviewConfig, ...themeConfig };
+      quickviewEnabled = themeConfig.enabled;
+
+      if (themeConfig.enabled) {
+        // Remove any existing buttons first
+        removeAllButtons();
+        // Initialize with theme config
+        initQuickview();
+        console.log('Quickview initialized with theme config');
+      } else {
+        console.log('Quickview disabled by theme config');
+      }
+    }
+
+
+    // Start when DOM is ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', loadConfig);
+    } else {
+      loadConfig();
+    }
+
+
+    // Expose for debugging
+    window.QuickviewApp = {
       init: initQuickview,
+      initWithThemeConfig: initWithThemeConfig,
       config: () => quickviewConfig,
-      openModal: openQuickviewModal,
-      closeModal: closeQuickviewModal,
-      addToCart: addToCart,
-      updateCartCount: updateCartCount,
-      showSuccessMessage: showSuccessMessage,
-      reloadConfig: reloadQuickviewConfig,
-      forceReload: loadQuickviewConfig
+      removeAll: removeAllButtons,
+      forceInit: () => {
+        removeAllButtons();
+        initQuickview();
+      },
+      reload: () => {
+        console.log('Reloading quickview configuration');
+        loadConfig();
+      },
+      enableNow: enableQuickviewImmediately,
+      restoreScroll: () => {
+        document.body.style.overflow = '';
+        document.documentElement.style.overflow = '';
+      },
+      cleanup: () => {
+        console.log('Cleaning up all quickview elements');
+        // Remove all buttons
+        document.querySelectorAll('.quickview-button').forEach(btn => btn.remove());
+        // Remove all markers
+        document.querySelectorAll('[data-quickview-initialized]').forEach(el => {
+          el.removeAttribute('data-quickview-initialized');
+        });
+        // Reset flags
+        quickviewInitialized = false;
+        console.log('Cleanup complete, ready to reinitialize');
+      }
     };
   })();
 </script>
 
-<!-- Quickview CSS -->
 <style>
   .quickview-button {
-    background: ${quickviewConfig.styling.buttonColor} !important;
-    color: white !important;
-    border: none !important;
-    padding: 8px 16px !important;
-    border-radius: 4px !important;
-    cursor: pointer !important;
-    font-size: 14px !important;
-    font-weight: 500 !important;
-    margin-top: 8px !important;
-    width: 100% !important;
-    transition: background-color 0.2s ease !important;
+    /* Inherit theme button styles */
     font-family: inherit !important;
-    text-decoration: none !important;
     display: block !important;
     text-align: center !important;
-    line-height: 1.2 !important;
-    position: relative !important;
-    z-index: 10 !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    max-width: none !important;
-    min-height: auto !important;
-    box-sizing: border-box !important;
-    overflow: visible !important;
-    clip: auto !important;
-    -webkit-appearance: none !important;
-    -moz-appearance: none !important;
-    appearance: none !important;
-  }
-  
-  .quickview-button:hover {
-    background: ${quickviewConfig.styling.buttonHoverColor} !important;
     text-decoration: none !important;
-    transform: translateY(-1px) !important;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2) !important;
+    pointer-events: auto !important;
+    position: relative !important;
+    z-index: 1000 !important;
+    user-select: none !important;
+    cursor: pointer !important;
+
+    /* Override specific styles if needed */
+    background: var(--quickview-button-bg, #007bff) !important;
+    color: var(--quickview-button-color, white) !important;
+    border: var(--quickview-button-border, none) !important;
+    padding: var(--quickview-button-padding, 8px 16px) !important;
+    border-radius: var(--quickview-button-radius, 4px) !important;
+    font-size: var(--quickview-button-font-size, 14px) !important;
+    font-weight: var(--quickview-button-font-weight, 500) !important;
+    margin-top: var(--quickview-button-margin-top, 8px) !important;
+    width: var(--quickview-button-width, 100%) !important;
+    transition: background-color 0.2s ease !important;
   }
-  
-  .quickview-button:focus {
-    outline: 2px solid ${quickviewConfig.styling.buttonColor} !important;
-    outline-offset: 2px !important;
-    background: ${quickviewConfig.styling.buttonHoverColor} !important;
+
+  .quickview-button:hover {
+    background: var(--quickview-button-hover-bg, #0056b3) !important;
+    text-decoration: none !important;
+    cursor: pointer !important;
   }
-  
+
   .quickview-button:active {
-    transform: translateY(0) !important;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+    background: var(--quickview-button-active-bg, #004085) !important;
+    transform: translateY(1px) !important;
   }
-  
-  /* Force button to be visible */
-  .quickview-button,
-  .quickview-button * {
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    position: static !important;
-    float: none !important;
-    clear: none !important;
+
+  .quickview-button:focus {
+    outline: 2px solid var(--quickview-button-focus-color, #007bff) !important;
+    outline-offset: 2px !important;
   }
-  
-  /* Override any theme hiding */
-  .card__content .quickview-button,
-  .card__information .quickview-button,
-  .card-information .quickview-button {
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
+
+  /* Ensure cloned buttons maintain theme styling */
+  .quickview-button.button--secondary {
+    background: var(--button--secondary-background, #007bff) !important;
+    color: var(--button--secondary-text, white) !important;
+    border: var(--button--secondary-border, 1px solid #007bff) !important;
+  }
+
+  .quickview-button.button--secondary:hover {
+    background: var(--button--secondary-background-hover, #0056b3) !important;
+    border-color: var(--button--secondary-border-hover, #0056b3) !important;
+  }
+
+  .quickview-modal {
+    font-family: inherit !important;
+    z-index: 999999 !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    background: rgba(0, 0, 0, 0.5) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    pointer-events: auto !important;
+    overflow: hidden !important;
+  }
+
+  .quickview-modal-content {
+    background: white !important;
+    padding: 24px !important;
+    max-width: 500px !important;
+    max-height: 80vh !important;
+    overflow: auto !important;
+    border-radius: 8px !important;
     position: relative !important;
-    margin: 8px 0 !important;
-    clear: both !important;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2) !important;
+    z-index: 1000000 !important;
+    pointer-events: auto !important;
+    margin: 20px !important;
   }
-  
-  /* Responsive adjustments */
-  @media (max-width: 768px) {
-    .quickview-button {
-      padding: 10px 16px !important;
-      font-size: 16px !important;
-      margin: 10px 0 !important;
-    }
+
+  .quickview-close-btn {
+    position: absolute !important;
+    top: 12px !important;
+    right: 12px !important;
+    background: none !important;
+    border: none !important;
+    font-size: 24px !important;
+    cursor: pointer !important;
+    color: #333 !important;
+    width: 30px !important;
+    height: 30px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    z-index: 1000001 !important;
+    pointer-events: auto !important;
   }
-  
-  /* Debug styles - remove after testing */
-  .quickview-button::before {
-    content: "🔍 " !important;
-    margin-right: 5px !important;
+
+  .quickview-close-btn:hover {
+    color: #666 !important;
+    cursor: pointer !important;
   }
-  
-  /* Ensure button container is visible */
-  .card__content,
-  .card__information,
-  .card-information {
-    position: relative !important;
-    overflow: visible !important;
+
+  .quickview-close-btn:active {
+    color: #999 !important;
   }
-</style> 
+</style>

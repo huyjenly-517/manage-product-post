@@ -9,13 +9,13 @@ export async function action({ request }) {
       return json({ error: 'Không thể xác thực quyền admin' }, { status: 401 });
     }
 
-    const { title, content, author, tags, excerpt } = await request.json();
+    const { title, content, author, tags, excerpt, sections } = await request.json();
 
     if (!title || !content) {
       return json({ error: 'Tiêu đề và nội dung là bắt buộc' }, { status: 400 });
     }
 
-    console.log('Đang tạo bài viết mới:', { title, author, tags, excerpt });
+    console.log('Đang tạo bài viết mới:', { title, author, tags, excerpt, hasSections: !!sections });
 
     // Sử dụng Shopify GraphQL API để tạo article trong blog
     console.log('Using Shopify GraphQL API for article creation...');
@@ -143,6 +143,66 @@ export async function action({ request }) {
       const article = createArticleResult.data.articleCreate.article;
       console.log('Article created successfully via GraphQL API:', article);
 
+      // Lưu sections data vào metafields để có thể edit sau này
+      if (sections) {
+        try {
+          const metafieldInput = {
+            namespace: "blog",
+            key: article.id.toString(),
+            type: "json",
+            value: JSON.stringify({
+              id: article.id.toString(),
+              title: title,
+              author: author || 'Admin',
+              tags: tags || [],
+              excerpt: excerpt || '',
+              sections: sections,
+              content: content,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            }),
+            ownerResource: "SHOP"
+          };
+
+          const metafieldResponse = await admin.graphql(`
+            mutation metafieldsSet($metafields: [MetafieldsSetInput!]!) {
+              metafieldsSet(metafields: $metafields) {
+                metafields {
+                  id
+                  key
+                  value
+                  namespace
+                  type
+                  ownerResource
+                }
+                userErrors {
+                  field
+                  message
+                  code
+                }
+              }
+            }
+          `, {
+            variables: {
+              metafields: [metafieldInput]
+            }
+          });
+
+          if (metafieldResponse.ok) {
+            const metafieldResult = await metafieldResponse.json();
+            if (metafieldResult.data?.metafieldsSet?.userErrors?.length > 0) {
+              console.warn('Warning: Could not save sections to metafields:', metafieldResult.data.metafieldsSet.userErrors[0].message);
+            } else {
+              console.log('Sections saved to metafields successfully');
+            }
+          } else {
+            console.warn('Warning: Could not save sections to metafields');
+          }
+        } catch (metafieldError) {
+          console.warn('Warning: Error saving sections to metafields:', metafieldError.message);
+        }
+      }
+
       return json({ 
         success: true, 
         article: {
@@ -206,6 +266,67 @@ export async function action({ request }) {
 
         if (result.article) {
           const article = result.article;
+          
+          // Lưu sections data vào metafields để có thể edit sau này
+          if (sections) {
+            try {
+              const metafieldInput = {
+                namespace: "blog",
+                key: article.id.toString(),
+                type: "json",
+                value: JSON.stringify({
+                  id: article.id.toString(),
+                  title: title,
+                  author: author || 'Admin',
+                  tags: tags || [],
+                  excerpt: excerpt || '',
+                  sections: sections,
+                  content: content,
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString()
+                }),
+                ownerResource: "SHOP"
+              };
+
+              const metafieldResponse = await admin.graphql(`
+                mutation metafieldsSet($metafields: [MetafieldsSetInput!]!) {
+                  metafieldsSet(metafields: $metafields) {
+                    metafields {
+                      id
+                      key
+                      value
+                      namespace
+                      type
+                      ownerResource
+                    }
+                    userErrors {
+                      field
+                      message
+                      code
+                    }
+                  }
+                }
+              `, {
+                variables: {
+                  metafields: [metafieldInput]
+                }
+              });
+
+              if (metafieldResponse.ok) {
+                const metafieldResult = await metafieldResponse.json();
+                if (metafieldResult.data?.metafieldsSet?.userErrors?.length > 0) {
+                  console.warn('Warning: Could not save sections to metafields:', metafieldResult.data.metafieldsSet.userErrors[0].message);
+                } else {
+                  console.log('Sections saved to metafields successfully');
+                }
+              } else {
+                console.warn('Warning: Could not save sections to metafields');
+              }
+            } catch (metafieldError) {
+              console.warn('Warning: Error saving sections to metafields:', metafieldError.message);
+            }
+          }
+
           return json({ 
             success: true, 
             article: {

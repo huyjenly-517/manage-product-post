@@ -9,13 +9,13 @@ export async function action({ request }) {
       return json({ error: 'Không thể xác thực quyền admin' }, { status: 401 });
     }
 
-    const { id, title, content, author, tags, excerpt } = await request.json();
+    const { id, title, content, author, tags, excerpt, sections } = await request.json();
 
     if (!id || !title || !content) {
       return json({ error: 'ID, tiêu đề và nội dung là bắt buộc' }, { status: 400 });
     }
 
-    console.log('Đang cập nhật bài viết:', { id, title, author, tags, excerpt });
+    console.log('Đang cập nhật bài viết:', { id, title, author, tags, excerpt, hasSections: !!sections });
 
     // Sử dụng Shopify GraphQL API để cập nhật article
     console.log('Using Shopify GraphQL API for article update...');
@@ -73,6 +73,65 @@ export async function action({ request }) {
 
       const article = updateArticleResult.data.articleUpdate.article;
       console.log('Article updated successfully via GraphQL API:', article);
+
+      // Lưu sections data vào metafields để có thể edit sau này
+      if (sections) {
+        try {
+          const metafieldInput = {
+            namespace: "blog",
+            key: article.id.toString(),
+            type: "json",
+            value: JSON.stringify({
+              id: article.id.toString(),
+              title: title,
+              author: author || 'Admin',
+              tags: tags || [],
+              excerpt: excerpt || '',
+              sections: sections,
+              content: content,
+              updatedAt: new Date().toISOString()
+            }),
+            ownerResource: "SHOP"
+          };
+
+          const metafieldResponse = await admin.graphql(`
+            mutation metafieldsSet($metafields: [MetafieldsSetInput!]!) {
+              metafieldsSet(metafields: $metafields) {
+                metafields {
+                  id
+                  key
+                  value
+                  namespace
+                  type
+                  ownerResource
+                }
+                userErrors {
+                  field
+                  message
+                  code
+                }
+              }
+            }
+          `, {
+            variables: {
+              metafields: [metafieldInput]
+            }
+          });
+
+          if (metafieldResponse.ok) {
+            const metafieldResult = await metafieldResponse.json();
+            if (metafieldResult.data?.metafieldsSet?.userErrors?.length > 0) {
+              console.warn('Warning: Could not save sections to metafields:', metafieldResult.data.metafieldsSet.userErrors[0].message);
+            } else {
+              console.log('Sections updated in metafields successfully');
+            }
+          } else {
+            console.warn('Warning: Could not update sections in metafields');
+          }
+        } catch (metafieldError) {
+          console.warn('Warning: Error updating sections in metafields:', metafieldError.message);
+        }
+      }
 
       return json({ 
         success: true, 
