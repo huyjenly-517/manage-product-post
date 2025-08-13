@@ -410,13 +410,7 @@ export default function ProductQuickviewConfig() {
                   value={config.styling.animation}
                   onChange={(value) => handleStylingChange('animation', value)}
                 />
-                <label htmlFor="colorInput">Buton Color </label>
-                <input
-                  type="color"
-                  id="colorInput"
-                  value={color}
-                  onChange={handleChange}
-                />
+
               </InlineStack>
 
               <InlineStack gap="400" wrap>

@@ -325,6 +325,7 @@
         font-size: 14px;
         font-weight: 500;
         margin-top: 8px;
+        height:40px;
         width: 100%;
         transition: background-color 0.2s ease;
         font-family: inherit;
@@ -374,7 +375,7 @@
         ${showOverlay ? 'background-color: rgba(0, 0, 0, 0.5);' : ''}
       `;
 
-      // Create modal content
+      // Create modal content with structure similar to Shopify theme
       const content = document.createElement('div');
       content.style.cssText = `
         background: ${currentTheme === 'dark' ? '#1f2937' : 'white'};
@@ -390,9 +391,13 @@
         font-family: inherit;
       `;
 
-      // Create close button
+      // Create close button similar to Shopify theme
       const closeButton = document.createElement('button');
-      closeButton.innerHTML = '×';
+      closeButton.innerHTML = `
+        <svg aria-hidden="true" focusable="false" class="icon icon-close" fill="none" viewBox="0 0 18 17">
+          <path d="M.865 15.978a.5.5 0 00.707.707l7.433-7.431 7.579 7.282a.5.5 0 00.846-.37.5.5 0 00-.153-.351L9.712 8.546l7.417-7.416a.5.5 0 10-.707-.708L8.991 7.853 1.413.573a.5.5 0 10-.693.72l7.563 7.268-7.418 7.417z" fill="currentColor"/>
+        </svg>
+      `;
       closeButton.style.cssText = `
         position: absolute;
         top: 12px;
@@ -409,6 +414,7 @@
         justify-content: center;
         border-radius: 50%;
         transition: background-color 0.2s ease;
+        z-index: 10;
       `;
 
       closeButton.addEventListener('mouseenter', () => {
@@ -423,13 +429,15 @@
         closeQuickviewModal();
       });
 
-      // Create product content
+      // Create product content with enhanced structure
       let productContent = '';
 
+      // Product title
       if (quickviewConfig.content.showTitle && productData.title) {
         productContent += `<h3 style="margin: 0 0 16px 0; font-size: 20px; font-weight: 600; color: ${quickviewConfig.styling.titleColor}; font-family: inherit;">${productData.title}</h3>`;
       }
 
+      // Product image
       if (quickviewConfig.content.showImage && productData.featured_image) {
         productContent += `
           <div style="margin-bottom: 16px; text-align: center;">
@@ -438,23 +446,27 @@
         `;
       }
 
+      // Product price
       if (quickviewConfig.content.showPrice && productData.price) {
         productContent += `<div style="margin-bottom: 16px; font-size: 18px; font-weight: 600; color: ${quickviewConfig.styling.priceColor}; font-family: inherit;">${productData.price}</div>`;
       }
 
+      // Product description
       if (quickviewConfig.content.showDescription && productData.description) {
         const description = productData.description.length > quickviewConfig.content.maxDescriptionLength
           ? `${productData.description.substring(0, quickviewConfig.content.maxDescriptionLength)}...`
           : productData.description;
         productContent += `<div style="margin-bottom: 16px; font-size: 14px; line-height: 1.5; color: ${quickviewConfig.styling.descriptionColor}; font-family: inherit;">${description}</div>`;
       }
-      console.log(productData);
+
+      // Product availability
       if (quickviewConfig.content.showAvailability) {
         const availability = productData.available ? '✅ In Stock' : '❌ Out of Stock';
         const color = productData.available ? '#10b981' : '#ef4444';
         productContent += `<div style="margin-bottom: 16px; font-size: 14px; color: ${color}; font-family: inherit;">${availability}</div>`;
       }
 
+      // Add to cart and view product buttons
       if (quickviewConfig.content.showAddToCart) {
         productContent += `
           <div style="text-align: center; margin-bottom: 16px;">
@@ -491,6 +503,7 @@
         `;
       }
 
+      // Set the content
       content.innerHTML = productContent;
       content.appendChild(closeButton);
 
