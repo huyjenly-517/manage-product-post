@@ -14,12 +14,8 @@ export async function action({ request }) {
     if (!title || !content) {
       return json({ error: 'Tiêu đề và nội dung là bắt buộc' }, { status: 400 });
     }
-
     console.log('Đang tạo bài viết mới:', { title, author, tags, excerpt, hasSections: !!sections });
-
     // Sử dụng Shopify GraphQL API để tạo article trong blog
-    console.log('Using Shopify GraphQL API for article creation...');
-    
     try {
       // Đầu tiên, lấy blog đầu tiên hoặc tạo blog mới nếu chưa có
       const blogsResponse = await admin.graphql(`
@@ -79,7 +75,7 @@ export async function action({ request }) {
         }
 
         const createBlogResult = await createBlogResponse.json();
-        
+
         if (createBlogResult.data?.blogCreate?.userErrors?.length > 0) {
           const errorMessage = createBlogResult.data.blogCreate.userErrors[0].message;
           throw new Error(errorMessage);
@@ -148,7 +144,7 @@ export async function action({ request }) {
         try {
           const metafieldInput = {
             namespace: "blog",
-            key: article.id.toString(),
+            key: article.id.startsWith('gid://') ? article.id : `gid://shopify/Article/${article.id}`,
             type: "json",
             value: JSON.stringify({
               id: article.id.toString(),
@@ -161,7 +157,7 @@ export async function action({ request }) {
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString()
             }),
-            ownerResource: "SHOP"
+            ownerId: article.id
           };
 
           const metafieldResponse = await admin.graphql(`
@@ -203,8 +199,8 @@ export async function action({ request }) {
         }
       }
 
-      return json({ 
-        success: true, 
+      return json({
+        success: true,
         article: {
           id: article.id.toString(),
           title: article.title,
@@ -219,7 +215,7 @@ export async function action({ request }) {
 
     } catch (graphqlError) {
       console.log('GraphQL API failed, trying REST API approach:', graphqlError.message);
-      
+
       // Fallback: Sử dụng REST API để tạo article
       try {
         // Lấy blog đầu tiên
@@ -232,7 +228,7 @@ export async function action({ request }) {
         }
 
         const blogsResult = await blogsResponse.json();
-        
+
         if (!blogsResult.blogs || blogsResult.blogs.length === 0) {
           throw new Error('No blogs found');
         }
@@ -266,13 +262,13 @@ export async function action({ request }) {
 
         if (result.article) {
           const article = result.article;
-          
+
           // Lưu sections data vào metafields để có thể edit sau này
           if (sections) {
             try {
               const metafieldInput = {
                 namespace: "blog",
-                key: article.id.toString(),
+                key: article.id.startsWith('gid://') ? article.id : `gid://shopify/Article/${article.id}`,
                 type: "json",
                 value: JSON.stringify({
                   id: article.id.toString(),
@@ -285,7 +281,7 @@ export async function action({ request }) {
                   createdAt: new Date().toISOString(),
                   updatedAt: new Date().toISOString()
                 }),
-                ownerResource: "SHOP"
+                ownerId: article.id
               };
 
               const metafieldResponse = await admin.graphql(`
@@ -327,8 +323,8 @@ export async function action({ request }) {
             }
           }
 
-          return json({ 
-            success: true, 
+          return json({
+            success: true,
             article: {
               id: article.id.toString(),
               title: article.title,
@@ -354,4 +350,4 @@ export async function action({ request }) {
     console.error('Lỗi khi tạo bài viết:', error);
     return json({ error: 'Có lỗi xảy ra khi tạo bài viết: ' + error.message }, { status: 500 });
   }
-} 
+}

@@ -1,8 +1,49 @@
 .quick-add {
-  position: relative;
+  position: absolute;
   grid-row-start: 4;
   margin: 0 0 1rem;
   z-index: 1;
+}
+.quick-add.top-right-image  {
+  left: unset;
+  top: 0;
+  right: 0;
+}
+.quick-add.top-middle-image  {
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+  right: unset;
+}
+.quick-add.top-left-image  {
+  left: 0;
+  top: 0;
+  right: unset;
+}
+.quick-add.middle-image  {
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  right: unset;
+}
+.quick-add.bottom-right-image  {
+  left: unset;
+  top: unset;
+  bottom:72px;
+  right: 0;
+}
+.quick-add.bottom-middle-image  {
+  left: 50%;
+  top: unset;
+  bottom:72px;
+  transform: translateX(-50%);
+  right: unset;
+}
+.quick-add.bottom-left-image  {
+  left: 0;
+  top: unset;
+  bottom:72px;
+  right: unset;
 }
 
 .card--card .quick-add {
@@ -208,6 +249,7 @@ quick-add-modal .product-form__buttons {
   padding: 0.8rem;
   min-width: 100%;
   box-sizing: border-box;
+  text-transform: capitalize;
 }
 
 quick-add-modal .product-media-container.constrain-height {

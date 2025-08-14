@@ -19,7 +19,7 @@ export async function action({ request }) {
 
     // Sử dụng Shopify GraphQL API để cập nhật article
     console.log('Using Shopify GraphQL API for article update...');
-    
+
     try {
       // Cập nhật article sử dụng GraphQL API
       const updateArticleResponse = await admin.graphql(`
@@ -77,6 +77,10 @@ export async function action({ request }) {
       // Lưu sections data vào metafields để có thể edit sau này
       if (sections) {
         try {
+          console.log('=== Updating custom sections in metafield ===');
+          console.log('Sections data:', sections);
+          console.log('Article ID for metafield key:', article.id);
+
           const metafieldInput = {
             namespace: "blog",
             key: article.id.toString(),
@@ -87,12 +91,14 @@ export async function action({ request }) {
               author: author || 'Admin',
               tags: tags || [],
               excerpt: excerpt || '',
-              sections: sections,
-              content: content,
+              sections: sections, // Custom sections data for editing
+              content: content, // HTML content for reference
               updatedAt: new Date().toISOString()
             }),
-            ownerResource: "SHOP"
+            ownerId: article.id
           };
+
+          console.log('Metafield input:', metafieldInput);
 
           const metafieldResponse = await admin.graphql(`
             mutation metafieldsSet($metafields: [MetafieldsSetInput!]!) {
@@ -121,20 +127,26 @@ export async function action({ request }) {
           if (metafieldResponse.ok) {
             const metafieldResult = await metafieldResponse.json();
             if (metafieldResult.data?.metafieldsSet?.userErrors?.length > 0) {
-              console.warn('Warning: Could not save sections to metafields:', metafieldResult.data.metafieldsSet.userErrors[0].message);
+              console.warn('❌ Warning: Could not save sections to metafields:', metafieldResult.data.metafieldsSet.userErrors[0].message);
             } else {
-              console.log('Sections updated in metafields successfully');
+              console.log('✅ Sections updated in metafields successfully');
+              console.log('Metafield ID:', metafieldResult.data.metafieldsSet.metafields[0]?.id);
             }
           } else {
-            console.warn('Warning: Could not update sections in metafields');
+            console.warn('❌ Warning: Could not update sections in metafields');
+            const errorText = await metafieldResponse.text();
+            console.error('Metafield response error:', errorText);
           }
         } catch (metafieldError) {
-          console.warn('Warning: Error updating sections in metafields:', metafieldError.message);
+          console.warn('❌ Warning: Error updating sections in metafields:', metafieldError.message);
+          console.error('Full error:', metafieldError);
         }
+      } else {
+        console.log('ℹ️ No sections data to update in metafield');
       }
 
-      return json({ 
-        success: true, 
+      return json({
+        success: true,
         article: {
           id: article.id.toString(),
           title: article.title,
@@ -149,7 +161,7 @@ export async function action({ request }) {
 
     } catch (graphqlError) {
       console.log('GraphQL API update failed, trying REST API approach:', graphqlError.message);
-      
+
       // Fallback: Sử dụng REST API để cập nhật article
       try {
         // Tìm article trong tất cả blogs
@@ -170,7 +182,7 @@ export async function action({ request }) {
             const articlesResponse = await admin.rest.get({
               path: `blogs/${blog.id}/articles.json`
             });
-            
+
             if (articlesResponse.ok) {
               const articlesData = await articlesResponse.json();
               if (articlesData.articles) {
@@ -199,9 +211,81 @@ export async function action({ request }) {
                     if (result.article) {
                       const updatedArticle = result.article;
                       articleFound = true;
-                      
-                      return json({ 
-                        success: true, 
+
+                      // Lưu sections data vào metafields ngay cả khi sử dụng REST API
+                      if (sections) {
+
+                        try {
+                          console.log('=== Saving sections to metafield via REST API fallback ===');
+                          console.log('Sections data:', sections);
+                          console.log('Article ID for metafield key:', updatedArticle.id);
+
+                          const metafieldInput = {
+                            namespace: "blog",
+                            key: article.id.startsWith('gid://') ? article.id : `gid://shopify/Article/${article.id}`,
+                            type: "json",
+                            value: JSON.stringify({
+                              id: updatedArticle.id.toString(),
+                              title: title,
+                              author: author || 'Admin',
+                              tags: tags || [],
+                              excerpt: excerpt || '',
+                              sections: sections, // Custom sections data for editing
+                              content: content, // HTML content for reference
+                              updatedAt: new Date().toISOString()
+                            }),
+                            ownerId: updatedArticle.id
+                          };
+
+                          console.log('Metafield input (REST API):', metafieldInput);
+
+                          const metafieldResponse = await admin.graphql(`
+                            mutation metafieldsSet($metafields: [MetafieldsSetInput!]!) {
+                              metafieldsSet(metafields: $metafields) {
+                                metafields {
+                                  id
+                                  key
+                                  value
+                                  namespace
+                                  type
+                                  ownerResource
+                                }
+                                userErrors {
+                                  field
+                                  message
+                                  code
+                                }
+                              }
+                            }
+                          `, {
+                            variables: {
+                              metafields: [metafieldInput]
+                            }
+                          });
+
+                          if (metafieldResponse.ok) {
+                            const metafieldResult = await metafieldResponse.json();
+                            if (metafieldResult.data?.metafieldsSet?.userErrors?.length > 0) {
+                              console.warn('❌ Warning: Could not save sections to metafields (REST API):', metafieldResult.data.metafieldsSet.userErrors[0].message);
+                            } else {
+                              console.log('✅ Sections saved to metafields successfully (REST API)');
+                              console.log('Metafield ID:', metafieldResult.data.metafieldsSet.metafields[0]?.id);
+                            }
+                          } else {
+                            console.warn('❌ Warning: Could not save sections to metafields (REST API)');
+                            const errorText = await metafieldResponse.text();
+                            console.error('Metafield response error (REST API):', errorText);
+                          }
+                        } catch (metafieldError) {
+                          console.warn('❌ Warning: Error saving sections to metafields (REST API):', metafieldError.message);
+                          console.error('Full error (REST API):', metafieldError);
+                        }
+                      } else {
+                        console.log('ℹ️ No sections data to save to metafield (REST API)');
+                      }
+
+                      return json({
+                        success: true,
                         article: {
                           id: updatedArticle.id.toString(),
                           title: updatedArticle.title,
@@ -239,4 +323,4 @@ export async function action({ request }) {
     console.error('Lỗi khi cập nhật bài viết:', error);
     return json({ error: 'Có lỗi xảy ra khi cập nhật bài viết: ' + error.message }, { status: 500 });
   }
-} 
+}

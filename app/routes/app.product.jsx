@@ -22,7 +22,8 @@ export default function ProductQuickviewConfig() {
   const [config, setConfig] = useState({
     enabled: true,
     buttonText: "Quick View",
-    position: 'below', // 'above' or 'below'
+    position: 'middle-image', // 'above' or 'below'
+    theme: 'light', // 'light', 'dark', 'auto'
     show: {
       price: true,
       button: true,
@@ -33,7 +34,6 @@ export default function ProductQuickviewConfig() {
       availability: true,
     },
     styling: {
-      theme: 'light', // 'light', 'dark', 'auto'
       animation: 'fade', // 'fade', 'slide', 'zoom'
       overlay: true,
       closeOnOverlayClick: true,
@@ -201,7 +201,8 @@ export default function ProductQuickviewConfig() {
     setConfig({
       enabled: true,
       buttonText: "Quick View",
-      position: 'below',
+      position: 'middle-image',
+      theme: 'light',
       show: {
         price: true,
         button: true,
@@ -212,7 +213,6 @@ export default function ProductQuickviewConfig() {
         availability: true,
       },
       styling: {
-        theme: 'light',
         animation: 'fade',
         overlay: true,
         closeOnOverlayClick: true,
@@ -312,7 +312,18 @@ export default function ProductQuickviewConfig() {
                 checked={config.enabled}
                 onChange={() => handleMainConfigChange('enabled', !config.enabled)}
               />
+              <InlineStack gap="400" wrap>
+                <Select
+                  label="Theme"
+                  options={[
+                    { label: 'Light', value: 'light' },
+                    { label: 'Dark', value: 'dark' },
+                  ]}
+                  value={config.theme}
+                  onChange={(value) => handleStylingChange('theme', value)}
+                />
 
+              </InlineStack>
               <TextField
                 label="Button Text"
                 value={config.buttonText}
@@ -323,10 +334,15 @@ export default function ProductQuickviewConfig() {
               <Select
                 label="Quickview Display Position"
                 options={[
-                  { label: 'Above product image', value: 'above' },
-                  { label: 'Below product image', value: 'below' },
-                  { label: 'Right of product image', value: 'right' },
-                  { label: 'Left of product image', value: 'left' },
+                  { label: 'Top Left image', value: 'top-left-image' },
+                  { label: 'Top Middle image', value: 'top-middle-image' },
+                  { label: 'Top Right image', value: 'top-right-image' },
+
+                  { label: 'Middle image', value: 'middle-image' },
+
+                  { label: 'Bottom Left image', value: 'bottom-left-image' },
+                  { label: 'Bottom Middle image', value: 'bottom-middle-image' },
+                  { label: 'Bottom Right image', value: 'bottom-right-image' },
                 ]}
                 value={config.position}
                 onChange={(value) => handleMainConfigChange('position', value)}
@@ -376,26 +392,8 @@ export default function ProductQuickviewConfig() {
             </BlockStack>
           </Card>
         </Layout.Section>
+        {/* Styling Configuration */}
 
-        {/* Configuration Preview */}
-        <Layout.Section>
-          <Card>
-            <BlockStack gap="400">
-              <Text variant="headingMd" as="h2">Current Configuration</Text>
-              <Box padding="400" background="bg-surface-secondary" borderRadius="200">
-                <pre style={{
-                  fontSize: '12px',
-                  lineHeight: '1.4',
-                  margin: 0,
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-word'
-                }}>
-                  {JSON.stringify(config, null, 2)}
-                </pre>
-              </Box>
-            </BlockStack>
-          </Card>
-        </Layout.Section>
       </Layout>
     </Page>
   );

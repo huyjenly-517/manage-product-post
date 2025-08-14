@@ -38,7 +38,7 @@ const SortableSection = ({ section, children, ...props }) => {
 
   return (
     <div ref={setNodeRef} style={style} {...attributes}>
-        <span className="drag-handle" {...listeners}>⋮⋮</span>
+        <span className="drag-handle" style={{cursor:'grab'}} {...listeners}>⋮⋮</span>
       {children}
     </div>
   );
@@ -61,47 +61,38 @@ const SortableColumn = ({ column, children, ...props }) => {
 
   return (
     <div ref={setNodeRef} style={style} {...attributes} >
-        <span className="drag-handle" {...listeners}>⋮⋮</span>
+        <span className="drag-handle" style={{cursor:'grab'}} {...listeners}>⋮⋮</span>
       {children}
     </div>
   );
 };
 
-const BlogBuilder = ({ initialContent = [], initialBlogData = null, blogHandle = 'news', postHandle = null, onSave, onCancel }) => {
-  console.log('=== BLOGBUILDER PROPS DEBUG ===');
-  console.log('initialContent:', initialContent);
-  console.log('initialBlogData:', initialBlogData);
-  console.log('blogHandle:', blogHandle);
-  console.log('postHandle:', postHandle);
-  
+const BlogBuilder = ({articleId, initialContent = [], initialBlogData = null, blogHandle = 'news', postHandle = null, onSave, onCancel }) => {
+
   // Function to parse HTML and recreate sections
   const parseHtmlToSections = (htmlContent) => {
-    console.log('🔍 Parsing HTML to recreate sections...');
-    console.log('HTML content:', htmlContent);
-    
+
     try {
       // Create a temporary DOM element to parse HTML
       const tempDiv = document.createElement('div');
       tempDiv.innerHTML = htmlContent;
-      
+
       const sections = [];
-      
+
       // Find all divs with class containing "section"
       const sectionElements = tempDiv.querySelectorAll('div[class*="section"]');
-      console.log('Found section elements:', sectionElements.length);
-      
+
       sectionElements.forEach((sectionEl, index) => {
         const section = {
           id: `section-${Date.now()}-${index + 1}`,
-          type: sectionEl.className.includes('two-column') ? 'two-column' : 
+          type: sectionEl.className.includes('two-column') ? 'two-column' :
                 sectionEl.className.includes('three-column') ? 'three-column' : 'single-column',
           columns: []
         };
-        
+
         // Find columns in section
         const columnElements = sectionEl.querySelectorAll('.column');
-        console.log(`Section ${index + 1} has ${columnElements.length} columns`);
-        
+
         columnElements.forEach((colEl, colIndex) => {
           const isImage = colEl.className.includes('image');
           const column = {
@@ -114,18 +105,17 @@ const BlogBuilder = ({ initialContent = [], initialBlogData = null, blogHandle =
           };
           section.columns.push(column);
         });
-        
+
         sections.push(section);
       });
-      
-      console.log('✅ Parsed sections:', sections);
+
       return sections;
     } catch (error) {
       console.error('❌ Error parsing HTML:', error);
       return [];
     }
   };
-  
+
   const [sections, setSections] = useState(initialContent.length > 0 ? initialContent : [
     {
       id: 'section-1',
@@ -173,27 +163,26 @@ const BlogBuilder = ({ initialContent = [], initialBlogData = null, blogHandle =
       }
       return '';
     })(),
-    excerpt: initialBlogData?.excerpt || ''
+    excerpt: initialBlogData?.excerpt || '',
+    sections: initialBlogData?.sections || '',
+    content: initialBlogData?.content || initialBlogData?.body_html || initialBlogData?.body || '',
+    body: initialBlogData?.body_html || initialBlogData?.body || '',
   });
 
-  // Shopify App Bridge
-  const app = useAppBridge();
+
 
   // Ensure component only runs on client-side
   useEffect(() => {
     setIsClient(true);
   }, []);
 
-  // Debug: Log blogData changes
-  useEffect(() => {
-    console.log('blogData changed:', blogData);
-  }, [blogData]);
-
   // Update blogData when initialBlogData changes (for editing)
   useEffect(() => {
-    if (initialBlogData) {
-      console.log('Initial blog data received:', initialBlogData);
+
+    if (initialBlogData && typeof initialBlogData === 'object') {
+
       setBlogData({
+        idRedirect: initialBlogData.id || '',
         title: initialBlogData.title || '',
         author: initialBlogData.author || 'Admin',
         tags: (() => {
@@ -208,25 +197,31 @@ const BlogBuilder = ({ initialContent = [], initialBlogData = null, blogHandle =
           }
           return '';
         })(),
-        excerpt: initialBlogData.excerpt || ''
+        excerpt: initialBlogData.excerpt || '',
+        sections: initialBlogData.sections || '',
+        content: initialBlogData.content || initialBlogData.body_html || initialBlogData.body || '',
+        body: initialBlogData.body_html || initialBlogData.body || ''
+      });
+    } else {
+      console.log('❌ No initialBlogData or invalid format');
+      console.log('Setting default blogData values');
+      setBlogData({
+        title: '',
+        author: 'Admin',
+        tags: '',
+        excerpt: ''
       });
     }
   }, [initialBlogData]);
 
+
   // Update sections when initialContent changes (for editing)
   useEffect(() => {
-    console.log('=== INITIAL CONTENT DEBUG ===');
-    console.log('initialContent received:', initialContent);
-    console.log('initialContent type:', typeof initialContent);
-    console.log('initialContent length:', initialContent?.length);
-    console.log('initialContent is array:', Array.isArray(initialContent));
-    console.log('initialContent is empty array:', initialContent?.length === 0);
-    console.log('initialContent === [] (JSON):', JSON.stringify(initialContent) === '[]');
-    
+
     if (initialContent && initialContent.length > 0) {
       console.log('✅ Initial sections content received:', initialContent);
       console.log('Sections data structure:', JSON.stringify(initialContent, null, 2));
-      
+
       // Debug: Check each section and column
       initialContent.forEach((section, sectionIndex) => {
         console.log(`Section ${sectionIndex}:`, section);
@@ -240,18 +235,16 @@ const BlogBuilder = ({ initialContent = [], initialBlogData = null, blogHandle =
           });
         }
       });
-      
+
       console.log('Setting sections state with:', initialContent);
       setSections(initialContent);
     } else {
-      console.log('❌ No initialContent or empty array');
-      console.log('Current sections state:', sections);
-      console.log('This means editingPost.sections is undefined or empty');
-      
       // Try to parse HTML content if available
-      if (initialBlogData?.content) {
-        console.log('🔍 Trying to parse HTML content to recreate sections...');
-        const parsedSections = parseHtmlToSections(initialBlogData.content);
+      // Priority: content (from metafield) > body_html > body
+      const htmlContent = initialBlogData?.content || initialBlogData?.body_html || initialBlogData?.body;
+
+      if (htmlContent) {
+        const parsedSections = parseHtmlToSections(htmlContent);
         if (parsedSections.length > 0) {
           console.log('✅ Successfully parsed sections from HTML:', parsedSections);
           setSections(parsedSections);
@@ -259,7 +252,11 @@ const BlogBuilder = ({ initialContent = [], initialBlogData = null, blogHandle =
           console.log('❌ Failed to parse sections from HTML');
         }
       } else {
-        console.log('❌ No HTML content available to parse');
+        console.log('Available data:', {
+          content: initialBlogData?.content,
+          body_html: initialBlogData?.body_html,
+          body: initialBlogData?.body
+        });
       }
     }
   }, [initialContent, initialBlogData]);
@@ -287,32 +284,32 @@ const BlogBuilder = ({ initialContent = [], initialBlogData = null, blogHandle =
         {
           id: `col-${Date.now()}-1`,
           type: 'text',
-          content: 'Column 1...',
+          content: 'Text 1...',
           style: { fontSize: '16px', color: '#333' }
         },
         {
           id: `col-${Date.now()}-2`,
           type: 'text',
-          content: 'Column 2...',
+          content: 'Text 2...',
           style: { fontSize: '16px', color: '#333' }
         }
       ] : [
         {
           id: `col-${Date.now()}-1`,
           type: 'text',
-          content: 'Column 1...',
+          content: 'Text 1...',
           style: { fontSize: '16px', color: '#333' }
         },
         {
           id: `col-${Date.now()}-2`,
           type: 'text',
-          content: 'Column 2...',
+          content: 'Text 2...',
           style: { fontSize: '16px', color: '#333' }
         },
         {
           id: `col-${Date.now()}-3`,
           type: 'text',
-          content: 'Column 3...',
+          content: 'Text 3...',
           style: { fontSize: '16px', color: '#333' }
         }
       ]
@@ -334,7 +331,7 @@ const BlogBuilder = ({ initialContent = [], initialBlogData = null, blogHandle =
           columns: [...section.columns, {
             id: `col-${Date.now()}`,
             type: 'text',
-            content: 'New Column...',
+            content: 'New Text...',
             style: { fontSize: '16px', color: '#333' }
           }]
         };
@@ -380,28 +377,6 @@ const BlogBuilder = ({ initialContent = [], initialBlogData = null, blogHandle =
     }));
   };
 
-  // Cập nhật ảnh
-  const updateImage = (sectionId, columnId, file) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      setSections(sections.map(section => {
-        if (section.id === sectionId) {
-          return {
-            ...section,
-            columns: section.columns.map(col => {
-              if (col.id === columnId) {
-                return { ...col, src: e.target.result };
-              }
-              return col;
-            })
-          };
-        }
-        return s;
-      }));
-    };
-    reader.readAsDataURL(file);
-  };
-
   // Mở Shopify Media Library picker
   const openMediaLibrary = (sectionId, columnId) => {
     // Mở modal Media Picker tùy chỉnh
@@ -411,27 +386,6 @@ const BlogBuilder = ({ initialContent = [], initialBlogData = null, blogHandle =
     fetchMediaList();
   };
 
-  // Cập nhật ảnh từ Media Library
-  const updateImageFromMediaLibrary = (sectionId, columnId, media) => {
-    setSections(sections.map(section => {
-      if (section.id === sectionId) {
-        return {
-          ...section,
-          columns: section.columns.map(col => {
-            if (col.id === columnId) {
-              return {
-                ...col,
-                src: media.src || media.url || media.preview?.image?.url,
-                alt: media.alt || media.altText || 'Caption'
-              };
-            }
-            return col;
-          })
-        };
-      }
-      return section;
-    }));
-  };
 
   // Xử lý khi chọn media từ modal
   const handleMediaSelect = (media) => {
@@ -566,35 +520,38 @@ const BlogBuilder = ({ initialContent = [], initialBlogData = null, blogHandle =
   };
 
   const handleView = () => {
-    // Tạo URL frontend cho bài viết (giống như button View ở list)
-    const storeDomain = window.location.hostname.includes('myshopify.com')
+    const myStore = window.location.hostname.includes('myshopify.com')
       ? window.location.hostname
-      : 'muamuahe.myshopify.com';
+      : 'muamuahe';
 
-    // Sử dụng postHandle từ props nếu có, hoặc tạo từ title
-    const finalPostHandle = postHandle || (blogData.title ?
-      blogData.title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') :
-      'untitled');
+    const shopDomain = window.location.hostname.includes('admin.shopify.com')
+      ? window.location.hostname
+      : 'admin.shopify.com';
 
-    const frontendUrl = `https://${storeDomain}/blogs/${blogHandle}/${finalPostHandle}`;
+    const articleId = blogData?.id || blogData?.idRedirect || 0;
+    if (!articleId) return;
+
+    const numericId = articleId.toString().includes('gid://')
+      ? articleId.split('/').pop()
+      : articleId;
+
+    const frontendUrl = `https://${shopDomain}/store/${myStore}/content/articles/${numericId}`;
 
     // Mở URL trong tab mới
     window.open(frontendUrl, '_blank');
   };
+
 
   const handleSaveSubmit = () => {
     // Debug: Log current blogData state
     console.log('Current blogData before save:', blogData);
 
     if (!blogData.title.trim()) {
-      alert('Vui lòng nhập tiêu đề bài viết!');
+      alert('Please enter title!');
       return;
     }
 
     // Debug: Log validation
-    console.log('Title validation passed:', blogData.title);
-    console.log('Author:', blogData.author);
-    console.log('Tags:', blogData.tags);
     console.log('Excerpt:', blogData.excerpt);
 
     // Validation: Kiểm tra sections data
@@ -863,6 +820,9 @@ const BlogBuilder = ({ initialContent = [], initialBlogData = null, blogHandle =
     `;
 
     // Tạo data để gửi đi
+    // Lưu ý: Dữ liệu sẽ được lưu theo 2 cách:
+    // 1. HTML content -> Shopify Article content (để hiển thị trên frontend)
+    // 2. Sections data -> Custom metafield (để edit sau này)
     const dataToSend = {
       sections: sectionsToSave,
       blogData: {
@@ -872,31 +832,26 @@ const BlogBuilder = ({ initialContent = [], initialBlogData = null, blogHandle =
           console.log('Processing tags:', blogData.tags, 'Type:', typeof blogData.tags, 'IsArray:', Array.isArray(blogData.tags));
 
           if (Array.isArray(blogData.tags)) {
-            // Nếu tags đã là array, chỉ cần filter và trim
             const processedTags = blogData.tags.map(tag => String(tag).trim()).filter(tag => tag);
             console.log('Tags processed from array:', processedTags);
             return processedTags;
           } else if (typeof blogData.tags === 'string' && blogData.tags.trim()) {
-            // Nếu tags là string, split và xử lý
             const processedTags = blogData.tags.split(',').map(tag => tag.trim()).filter(tag => tag);
             console.log('Tags processed from string:', processedTags);
             return processedTags;
           } else {
-            // Nếu tags không có hoặc rỗng, trả về array rỗng
             console.log('No tags found, returning empty array');
             return [];
           }
         })(),
         excerpt: blogData.excerpt.trim(),
-        content: `${globalCss}<div class="blog-post">${content}</div>`
+        content: `${globalCss}<div class="blog-post">${content}</div>`,
       }
     };
-
-    // Debug: Log final data being sent
-    console.log('Data being sent to onSave:', dataToSend);
-
     // Gọi onSave với dữ liệu đầy đủ
     onSave(dataToSend);
+    // Show success message about dual saving
+    console.log('✅ Data sent successfully!');
 
     setShowSaveModal(false);
   };
@@ -910,18 +865,19 @@ const BlogBuilder = ({ initialContent = [], initialBlogData = null, blogHandle =
     return <div>Loading...</div>;
   }
 
+
   return (
     <Page>
       {/* Success Message */}
-      {showSuccessMessage && (
+{/*      {showSuccessMessage && (
         <Banner
           status="success"
           title="Thành công!"
           onDismiss={() => setShowSuccessMessage(false)}
         >
-          Ảnh đã được upload thành công vào Media Library và cập nhật vào bài viết!
+          Success
         </Banner>
-      )}
+      )}*/}
 
       {/* Toolbar */}
       <Layout>
@@ -943,7 +899,7 @@ const BlogBuilder = ({ initialContent = [], initialBlogData = null, blogHandle =
                   💾 Save
                 </Button>
                 <Button onClick={handleView} variant="secondary">
-                  👁️ View
+                  👁️ Edit On Shopify
                 </Button>
                 <Button onClick={onCancel} variant="secondary">
                   ❌ Cancel
@@ -1041,10 +997,7 @@ const BlogBuilder = ({ initialContent = [], initialBlogData = null, blogHandle =
                                               <textarea
                                                 value={column.content}
                                                 onChange={(e) => {
-                                                  console.log('=== TEXTAREA ONCHANGE ===');
-                                                  console.log('Value:', e.target.value);
-                                                  console.log('Column ID:', column.id);
-                                                  console.log('Section ID:', section.id);
+
 
                                                   // Update the column content directly
                                                   const newSections = sections.map(s => {
@@ -1062,7 +1015,6 @@ const BlogBuilder = ({ initialContent = [], initialBlogData = null, blogHandle =
                                                     return s;
                                                   });
 
-                                                  console.log('New sections:', newSections);
                                                   setSections(newSections);
                                                 }}
                                                 placeholder="Nhập nội dung..."
@@ -1187,13 +1139,13 @@ const BlogBuilder = ({ initialContent = [], initialBlogData = null, blogHandle =
                                       </Box>
                                     </SortableColumn>
                                   ))}
-                                  <Button
+                                  <span
                                     onClick={() => addColumn(section.id)}
-                                    variant="primary"
-                                    size="micro"
+
+                                    style={{maxHeight:'28px', cursor:'pointer', lineHeight:'28px', background:'#333',color:'#fff',marginTop:'20px', padding:'0 10px', borderRadius:'5px', boxShadow:'var(--p-shadow-button-primary)'}}
                                   >
-                                    + column
-                                  </Button>
+                                    + Text or Image
+                                  </span>
                                 </InlineStack>
                               </SortableContext>
                             </DndContext>
@@ -1227,7 +1179,7 @@ const BlogBuilder = ({ initialContent = [], initialBlogData = null, blogHandle =
         >
           <Modal.Section>
             <BlockStack gap="400">
-              <Card>
+              {/*<Card>
                 <BlockStack gap="300" padding="400">
                   <Text variant="headingMd" as="h3">📁 Upload ảnh mới</Text>
                   <Text as="p" variant="bodyMd">Chọn file ảnh từ máy tính của bạn</Text>
@@ -1307,26 +1259,26 @@ const BlogBuilder = ({ initialContent = [], initialBlogData = null, blogHandle =
                     {isUploading ? 'Đang upload...' : 'Chọn File'}
                   </Button>
                 </BlockStack>
-              </Card>
+              </Card>*/}
 
               <Card>
                 <BlockStack gap="300" padding="400">
-                  <Text variant="headingMd" as="h3">🖼️ Chọn từ Media Library</Text>
-                  <Text as="p" variant="bodyMd">Chọn ảnh từ kho media của store</Text>
+                  <Text variant="headingMd" as="h3">🖼️ Media Library</Text>
+                  <Text as="p" variant="bodyMd">Select files from media store</Text>
 
                   {isLoadingMedia ? (
-                    <Box padding="400" textAlign="center">
-                      <Text variant="bodyMd" tone="subdued">Đang tải danh sách media...</Text>
+                    <Box padding="400" >
+                      <Text variant="bodyMd" tone="subdued">Loading...</Text>
                     </Box>
                   ) : mediaList.length > 0 ? (
                     <BlockStack gap="400">
                       {/* Search and Filter Bar */}
-                      <Box padding="300" background="bg-surface-secondary" borderRadius="200">
+                      {/*<Box padding="300" background="bg-surface-secondary" borderRadius="200">
                         <InlineStack gap="300" align="space-between">
                           <div style={{ flex: 1, maxWidth: '300px' }}>
                             <input
                               type="text"
-                              placeholder="Tìm kiếm ảnh..."
+                              placeholder="Search..."
                               style={{
                                 width: '100%',
                                 padding: '8px 12px',
@@ -1354,14 +1306,14 @@ const BlogBuilder = ({ initialContent = [], initialBlogData = null, blogHandle =
                             </Button>
                           </InlineStack>
                         </InlineStack>
-                      </Box>
+                      </Box>*/}
 
                       <InlineStack align="space-between">
                         <Text variant="bodySm" tone="subdued">
-                          Tìm thấy {mediaList.length} ảnh
+                          Found {mediaList.length} Image
                         </Text>
                         <Text variant="bodySm" tone="subdued">
-                          {mediaList.filter(media => media.type === 'IMAGE').length} ảnh
+                          {mediaList.filter(media => media.type === 'IMAGE').length} Image
                         </Text>
                       </InlineStack>
 
@@ -1459,14 +1411,14 @@ const BlogBuilder = ({ initialContent = [], initialBlogData = null, blogHandle =
                       </div>
 
                       {/* Pagination info */}
-                      <Box padding="200" textAlign="center">
+                      <Box padding="200" >
                         <Text variant="bodySm" tone="subdued">
                           Hiển thị {mediaList.filter(media => media.type === 'IMAGE').length} ảnh
                         </Text>
                       </Box>
                     </BlockStack>
                   ) : (
-                    <Box padding="400" textAlign="center">
+                    <Box padding="400" >
                       <Text variant="bodyMd" tone="subdued">Không có ảnh nào trong Media Library</Text>
                     </Box>
                   )}
@@ -1550,7 +1502,7 @@ const BlogBuilder = ({ initialContent = [], initialBlogData = null, blogHandle =
                     id="excerpt"
                     value={blogData.excerpt}
                     onChange={(e) => setBlogData({ ...blogData, excerpt: e.target.value })}
-                    placeholder="Nhập tóm tắt bài viết..."
+                    placeholder="intro..."
                     style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '14px', minHeight: '80px', resize: 'vertical' }}
                   />
                 </div>
