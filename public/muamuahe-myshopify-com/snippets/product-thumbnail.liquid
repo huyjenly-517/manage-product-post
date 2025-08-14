@@ -76,7 +76,19 @@
       </div>
     {%- endif -%}
   </noscript>
-
+    <script>
+        (function () {
+            const thumbnailQv = document.querySelector('[data-modal^="#ProductModal-{{ modal_id }}"]');
+            const parentQv = thumbnailQv.closest('.grid__item.product__media-wrapper');
+            if (parentQv) {
+                if (window.quickviewConfig.show.image){
+                    parentQv.style.display = 'block';
+                }else{
+                    parentQv.style.display = 'none';
+                }
+            }
+        })();
+    </script>
   <modal-opener class="product__modal-opener product__modal-opener--{{ media.media_type }} no-js-hidden" data-modal="#ProductModal-{{ modal_id }}">
     <span class="product__media-icon motion-reduce quick-add-hidden{% if media.media_type == 'image' %} product__media-icon--{{ section.settings.image_zoom }}{% endif %}" aria-hidden="true">
       {%- liquid
