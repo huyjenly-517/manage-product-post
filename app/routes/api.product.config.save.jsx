@@ -98,7 +98,7 @@ export async function action({ request }) {
 
     return json({
       success: true,
-      message: 'Cấu hình đã được lưu thành công',
+      message: 'Configuration has been saved successfully.',
       config: config
     });
 

@@ -578,24 +578,24 @@ export default function BlogListPage() {
             author: blogData.author,
             tags: blogData.tags,
             excerpt: blogData.excerpt,
-            sections: sections // Thêm sections data
+            sections: sections // add sections data
           })
         });
 
         if (response.ok) {
           const result = await response.json();
           if (result.success) {
-            alert('Đã tạo bài viết thành công!');
+            alert('Successfully created.!');
             setShowBuilder(false);
             window.location.reload();
           } else {
-            alert(`Lỗi: ${result.error}`);
+            alert(`Error: ${result.error}`);
           }
         } else {
-          alert('Có lỗi xảy ra khi tạo bài viết');
+          alert('Error when create post');
         }
       } else {
-        // Cập nhật bài viết
+        // update post
         const response = await fetch('/api/blog/update', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -606,27 +606,27 @@ export default function BlogListPage() {
             author: blogData.author,
             tags: blogData.tags,
             excerpt: blogData.excerpt,
-            sections: sections // Thêm sections data
+            sections: sections // add sections data
           })
         });
 
         if (response.ok) {
           const result = await response.json();
           if (result.success) {
-            alert('Đã cập nhật bài viết thành công!');
+            alert('Successfully created.!');
             setShowBuilder(false);
-            // Refresh trang để lấy dữ liệu mới
+            // Refresh
             window.location.reload();
           } else {
-            alert(`Lỗi: ${result.error}`);
+            alert(`Error: ${result.error}`);
           }
         } else {
-          alert('Có lỗi xảy ra khi cập nhật bài viết');
+          alert('Error when create post');
         }
       }
     } catch (error) {
-      console.error('Lỗi khi lưu bài viết:', error);
-      alert('Có lỗi xảy ra khi lưu bài viết');
+      console.error('Error when save:', error);
+      alert('Error when save');
     }
   };
 
@@ -644,7 +644,7 @@ export default function BlogListPage() {
               <div style={{ textAlign: 'center', padding: '4rem' }}>
                 <Spinner size="large" />
                 <div style={{ marginTop: '1rem' }}>
-                  <Text variant="bodyMd" as="p">Đang tải dữ liệu...</Text>
+                  <Text variant="bodyMd" as="p">loadding...</Text>
                 </div>
               </div>
             </Card>
@@ -745,9 +745,9 @@ export default function BlogListPage() {
                 heading="Chưa có bài viết nào"
                 image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
               >
-                <p>Bắt đầu tạo bài viết đầu tiên của bạn!</p>
+                <p>Start creating your first post!</p>
                 <Button onClick={handleAdd} primary>
-                  Tạo bài viết đầu tiên
+                  Create first post
                 </Button>
               </EmptyState>
             ) : (

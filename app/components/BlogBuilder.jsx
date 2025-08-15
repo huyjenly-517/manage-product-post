@@ -514,7 +514,7 @@ const BlogBuilder = ({articleId, initialContent = [], initialBlogData = null, bl
     }
   };
 
-  // Lưu bài viết
+  // Save Post
   const handleSave = () => {
     setShowSaveModal(true);
   };
@@ -588,7 +588,7 @@ const BlogBuilder = ({articleId, initialContent = [], initialBlogData = null, bl
     console.log(`Validated sections: ${validSections.length}/${sections.length} sections are valid`);
 
     if (validSections.length === 0) {
-      alert('Không có sections hợp lệ để lưu!');
+      alert('There are no valid sections to save!');
       return;
     }
 
@@ -1434,14 +1434,14 @@ const BlogBuilder = ({articleId, initialContent = [], initialBlogData = null, bl
         <Modal
           open={showSaveModal}
           onClose={handleSaveCancel}
-          title="Lưu Bài Viết"
+          title="Save Post"
           primaryAction={{
-            content: 'Lưu',
+            content: 'Save',
             onAction: handleSaveSubmit,
           }}
           secondaryActions={[
             {
-              content: 'Hủy',
+              content: 'Cancel',
               onAction: handleSaveCancel,
             },
           ]}
@@ -1494,7 +1494,7 @@ const BlogBuilder = ({articleId, initialContent = [], initialBlogData = null, bl
                   />
                 </div>
 
-                <div>
+                {/*<div>
                   <label htmlFor="excerpt" style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#555' }}>
                     Excerpt:
                   </label>
@@ -1505,7 +1505,7 @@ const BlogBuilder = ({articleId, initialContent = [], initialBlogData = null, bl
                     placeholder="intro..."
                     style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '14px', minHeight: '80px', resize: 'vertical' }}
                   />
-                </div>
+                </div>*/}
               </BlockStack>
             </form>
           </Modal.Section>

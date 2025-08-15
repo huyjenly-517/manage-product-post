@@ -218,7 +218,7 @@
             {% assign button_text_end = button_text_start[1] | split: '"' %}
             {% assign button_text = button_text_end[0] %}
           {% else %}
-            {% assign button_text = '' %}
+            {% assign button_text = 'Quick View' %}
           {% endif %}
 
           {% comment %} Extract position from metafield {% endcomment %}
@@ -227,18 +227,22 @@
             {% assign position_end = position_start[1] | split: '"' %}
             {% assign button_position = position_end[0] %}
           {% else %}
-            {% assign button_position = '' %}
+            {% assign button_position = 'middle-image' %}
           {% endif %}
 
-          {% comment %} Extract position from metafield {% endcomment %}
+          {% comment %} Extract theme from metafield {% endcomment %}
           {% if config_string contains 'theme":"' %}
-            {% assign styling = config_string | split: 'theme":"' %}
-            {% assign styling = styling[1] | split: '"' %}
-            {% assign styling = styling[0] %}
+            {% assign stylingTheme_start = config_string | split: 'theme":"' %}
+            {% assign stylingTheme_end = stylingTheme_start[1] | split: '"' %}
+            {% assign stylingTheme = stylingTheme_end[0] %}
           {% else %}
-            {% assign styling = '' %}
+            {% assign stylingTheme = 'light' %}
           {% endif %}
-
+        {% else %}
+          {% assign enable_quickview = false %}
+          {% assign button_text = 'Quick View' %}
+          {% assign button_position = 'middle-image' %}
+          {% assign stylingTheme = 'light' %}
         {% endif %}
 
         {%- if enable_quickview -%}
@@ -293,7 +297,7 @@
                 >
                   {% render 'icon-close' %}
                 </button>
-                <div id="QuickAddInfo-{{ card_product.id }}" class="quick-add-modal__content-info theme-{{ styling }}"></div>
+                <div id="QuickAddInfo-{{ card_product.id }}" class="quick-add-modal__content-info theme-{{ stylingTheme }}"></div>
               </div>
             </quick-add-modal>
           </div>

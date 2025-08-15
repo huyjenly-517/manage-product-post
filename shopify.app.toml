@@ -4,7 +4,7 @@ client_id = "84ea256426b476e9df7b2e91db506da8"
 name = "manage-product-post"
 handle = "manage-product-post"
 # Sử dụng domain trycloudflare.com cho app (không thể dùng domain của store)
-application_url = "https://investor-revealed-prototype-concerts.trycloudflare.com"
+application_url = "https://horse-imported-default-yourself.trycloudflare.com"
 embedded = true
 
 [build]
@@ -28,7 +28,7 @@ scopes = "write_products,read_content,write_content,read_files,write_files"
 
 [auth]
 # Sử dụng domain trycloudflare.com cho authentication
-redirect_urls = ["https://investor-revealed-prototype-concerts.trycloudflare.com/auth/callback", "https://investor-revealed-prototype-concerts.trycloudflare.com/auth/shopify/callback", "https://investor-revealed-prototype-concerts.trycloudflare.com/api/auth/callback"]
+redirect_urls = ["https://horse-imported-default-yourself.trycloudflare.com/auth/callback", "https://horse-imported-default-yourself.trycloudflare.com/auth/shopify/callback", "https://horse-imported-default-yourself.trycloudflare.com/api/auth/callback"]
 
 [pos]
 embedded = false

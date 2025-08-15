@@ -32,41 +32,6 @@ export default function ProductQuickviewConfig() {
       image: true,
       title: true,
       availability: true,
-    },
-    styling: {
-      animation: 'fade', // 'fade', 'slide', 'zoom'
-      overlay: true,
-      closeOnOverlayClick: true,
-      buttonColor: '#007bff',
-      buttonHoverColor: '#0056b3',
-      modalWidth: '500px',
-      modalMaxHeight: '80vh',
-      borderRadius: '8px',
-      shadow: '0 10px 25px rgba(0, 0, 0, 0.2)',
-      closeButtonColor: '#333',
-      closeButtonHoverBg: 'rgba(0, 0, 0, 0.1)',
-      titleColor: '#333',
-      priceColor: '#10b981',
-      descriptionColor: '#6b7280',
-      addToCartButtonColor: '#dc3545',
-      addToCartButtonHoverColor: '#c82333',
-      viewProductButtonColor: '#10b981',
-      viewProductButtonHoverColor: '#059669'
-    },
-    triggers: {
-      hover: false,
-      click: true,
-      button: true,
-    },
-    content: {
-      maxDescriptionLength: 150,
-      showAddToCart: true,
-      showViewProduct: true,
-      showAvailability: true,
-      showPrice: true,
-      showImage: true,
-      showTitle: true,
-      showDescription: true
     }
   });
 
@@ -211,41 +176,6 @@ export default function ProductQuickviewConfig() {
         image: true,
         title: true,
         availability: true,
-      },
-      styling: {
-        animation: 'fade',
-        overlay: true,
-        closeOnOverlayClick: true,
-        buttonColor: '#007bff',
-        buttonHoverColor: '#0056b3',
-        modalWidth: '500px',
-        modalMaxHeight: '80vh',
-        borderRadius: '8px',
-        shadow: '0 10px 25px rgba(0, 0, 0, 0.2)',
-        closeButtonColor: '#333',
-        closeButtonHoverBg: 'rgba(0, 0, 0, 0.1)',
-        titleColor: '#333',
-        priceColor: '#10b981',
-        descriptionColor: '#6b7280',
-        addToCartButtonColor: '#dc3545',
-        addToCartButtonHoverColor: '#c82333',
-        viewProductButtonColor: '#10b981',
-        viewProductButtonHoverColor: '#059669'
-      },
-      triggers: {
-        hover: false,
-        click: true,
-        button: true,
-      },
-      content: {
-        maxDescriptionLength: 150,
-        showAddToCart: true,
-        showViewProduct: true,
-        showAvailability: true,
-        showPrice: true,
-        showImage: true,
-        showTitle: true,
-        showDescription: true
       }
     });
   };
@@ -312,18 +242,16 @@ export default function ProductQuickviewConfig() {
                 checked={config.enabled}
                 onChange={() => handleMainConfigChange('enabled', !config.enabled)}
               />
-              <InlineStack gap="400" wrap>
-                <Select
-                  label="Theme"
-                  options={[
-                    { label: 'Light', value: 'light' },
-                    { label: 'Dark', value: 'dark' },
-                  ]}
-                  value={config.theme}
-                  onChange={(value) => handleStylingChange('theme', value)}
-                />
 
-              </InlineStack>
+              <Select
+                label="Theme"
+                options={[
+                  { label: 'Light', value: 'light' },
+                  { label: 'Dark', value: 'dark' }
+                ]}
+                value={config.theme}
+                onChange={(value) => handleMainConfigChange('theme', value)}
+              />
               <TextField
                 label="Button Text"
                 value={config.buttonText}
